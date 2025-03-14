@@ -173,6 +173,26 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   };
 
+  // Handle GIF processing and fill subsequent frames
+  const handleGifProcessed = (gifFrames: string[], startFrameId: number) => {
+    // Create a copy of the current frames
+    const updatedFrames = [...frames];
+    
+    // Fill subsequent frames with GIF frames
+    for (let i = 0; i < gifFrames.length; i++) {
+      const frameIndex = startFrameId + i;
+      if (frameIndex < updatedFrames.length) {
+        updatedFrames[frameIndex] = {
+          ...updatedFrames[frameIndex],
+          image: gifFrames[i]
+        };
+      }
+    }
+    
+    // Update frames state
+    setFrames(updatedFrames);
+  };
+
   // Start playback from selected frame
   const playFromSelectedFrame = () => {
     if (wavesurferRef.current && selectedFrame !== null) {
@@ -315,7 +335,8 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         selectedFrame !== null && (
           <FrameEditor 
             frame={frames[selectedFrame]} 
-            onImageUpload={handleImageUpload} 
+            onImageUpload={handleImageUpload}
+            onGifProcessed={handleGifProcessed}
           />
         )
       )}
