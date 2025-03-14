@@ -26,6 +26,7 @@ interface ExportOptions {
 const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalProps) => {
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [isPyodideLoading, setIsPyodideLoading] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     format: 'gif',
     quality: 80,
@@ -42,9 +43,16 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
   useEffect(() => {
     if (isOpen) {
       // Start initializing Pyodide in the background
-      pythonExportService.ensureInitialized().catch(error => {
-        console.error('Failed to initialize Pyodide:', error);
-      });
+      setIsPyodideLoading(true);
+      pythonExportService.ensureInitialized()
+        .then(() => {
+          setIsPyodideLoading(false);
+        })
+        .catch(error => {
+          console.error('Failed to initialize Pyodide:', error);
+          setIsPyodideLoading(false);
+          alert('Failed to initialize Python environment. Export functionality may be limited.');
+        });
     }
   }, [isOpen]);
 
@@ -164,158 +172,168 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
         </div>
         
         <div className="modal-content">
-          <div className="export-options">
-            <div className="option-group">
-              <h3>Format</h3>
-              <div className="format-options">
-                <button 
-                  className={`format-button ${exportOptions.format === 'gif' ? 'selected' : ''}`}
-                  onClick={() => handleFormatChange('gif')}
-                  disabled={isExporting}
-                >
-                  GIF
-                </button>
-                <button 
-                  className={`format-button ${exportOptions.format === 'mp4' ? 'selected' : ''}`}
-                  onClick={() => handleFormatChange('mp4')}
-                  disabled={isExporting}
-                >
-                  MP4
-                </button>
-                <button 
-                  className={`format-button ${exportOptions.format === 'webm' ? 'selected' : ''}`}
-                  onClick={() => handleFormatChange('webm')}
-                  disabled={isExporting}
-                >
-                  WebM
-                </button>
-                <button 
-                  className={`format-button ${exportOptions.format === 'png' ? 'selected' : ''}`}
-                  onClick={() => handleFormatChange('png')}
-                  disabled={isExporting}
-                >
-                  PNG Sequence
-                </button>
-              </div>
-              {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && (
-                <p className="note">
-                  Note: Video export is limited in the browser. For best results, use GIF or PNG Sequence.
-                </p>
-              )}
+          {isPyodideLoading ? (
+            <div className="loading-container">
+              <div className="loading-spinner"></div>
+              <p>Loading Python environment...</p>
+              <p className="note">This may take a moment on first use.</p>
             </div>
-            
-            <div className="option-group">
-              <h3>Quality</h3>
-              <div className="quality-slider">
-                <input 
-                  type="range" 
-                  min="1" 
-                  max="100" 
-                  value={exportOptions.quality} 
-                  onChange={handleQualityChange}
-                  disabled={isExporting}
-                />
-                <span>{exportOptions.quality}%</span>
-              </div>
-            </div>
-            
-            <div className="option-group">
-              <h3>Resolution</h3>
-              <div className="resolution-inputs">
-                <div className="resolution-input">
-                  <label>Width:</label>
-                  <input 
-                    type="number" 
-                    value={exportOptions.resolution.width} 
-                    onChange={(e) => handleResolutionChange('width', e.target.value)}
-                    min="1"
-                    disabled={isExporting}
-                  />
-                </div>
-                <div className="resolution-input">
-                  <label>Height:</label>
-                  <input 
-                    type="number" 
-                    value={exportOptions.resolution.height} 
-                    onChange={(e) => handleResolutionChange('height', e.target.value)}
-                    min="1"
-                    disabled={isExporting}
-                  />
-                </div>
-              </div>
-            </div>
-            
-            {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && (
-              <div className="option-group">
-                <h3>Audio</h3>
-                <div className="audio-option">
-                  <input 
-                    type="checkbox" 
-                    id="include-audio" 
-                    checked={exportOptions.includeAudio}
-                    onChange={handleAudioChange}
-                    disabled={isExporting || !audioFile}
-                  />
-                  <label htmlFor="include-audio">Include audio</label>
-                  {!audioFile && <p className="note">(No audio file available)</p>}
+          ) : (
+            <>
+              <div className="export-options">
+                <div className="option-group">
+                  <h3>Format</h3>
+                  <div className="format-options">
+                    <button 
+                      className={`format-button ${exportOptions.format === 'gif' ? 'selected' : ''}`}
+                      onClick={() => handleFormatChange('gif')}
+                      disabled={isExporting}
+                    >
+                      GIF
+                    </button>
+                    <button 
+                      className={`format-button ${exportOptions.format === 'mp4' ? 'selected' : ''}`}
+                      onClick={() => handleFormatChange('mp4')}
+                      disabled={isExporting}
+                    >
+                      MP4
+                    </button>
+                    <button 
+                      className={`format-button ${exportOptions.format === 'webm' ? 'selected' : ''}`}
+                      onClick={() => handleFormatChange('webm')}
+                      disabled={isExporting}
+                    >
+                      WebM
+                    </button>
+                    <button 
+                      className={`format-button ${exportOptions.format === 'png' ? 'selected' : ''}`}
+                      onClick={() => handleFormatChange('png')}
+                      disabled={isExporting}
+                    >
+                      PNG Sequence
+                    </button>
+                  </div>
+                  {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && (
+                    <p className="note">
+                      Note: Video export is limited in the browser. For best results, use GIF or PNG Sequence.
+                    </p>
+                  )}
                 </div>
                 
-                {exportOptions.includeAudio && audioFile && (
-                  <div className="audio-option">
+                <div className="option-group">
+                  <h3>Quality</h3>
+                  <div className="quality-slider">
                     <input 
-                      type="checkbox" 
-                      id="use-entire-soundtrack" 
-                      checked={exportOptions.useEntireSoundtrack}
-                      onChange={handleEntireSoundtrackChange}
-                      disabled={isExporting || !exportOptions.includeAudio}
+                      type="range" 
+                      min="1" 
+                      max="100" 
+                      value={exportOptions.quality} 
+                      onChange={handleQualityChange}
+                      disabled={isExporting}
                     />
-                    <label htmlFor="use-entire-soundtrack">Use entire soundtrack</label>
-                    <p className="note">(Extends video to match full audio length)</p>
+                    <span>{exportOptions.quality}%</span>
+                  </div>
+                </div>
+                
+                <div className="option-group">
+                  <h3>Resolution</h3>
+                  <div className="resolution-inputs">
+                    <div className="resolution-input">
+                      <label>Width:</label>
+                      <input 
+                        type="number" 
+                        value={exportOptions.resolution.width} 
+                        onChange={(e) => handleResolutionChange('width', e.target.value)}
+                        min="1"
+                        disabled={isExporting}
+                      />
+                    </div>
+                    <div className="resolution-input">
+                      <label>Height:</label>
+                      <input 
+                        type="number" 
+                        value={exportOptions.resolution.height} 
+                        onChange={(e) => handleResolutionChange('height', e.target.value)}
+                        min="1"
+                        disabled={isExporting}
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && (
+                  <div className="option-group">
+                    <h3>Audio</h3>
+                    <div className="audio-option">
+                      <input 
+                        type="checkbox" 
+                        id="include-audio" 
+                        checked={exportOptions.includeAudio}
+                        onChange={handleAudioChange}
+                        disabled={isExporting || !audioFile}
+                      />
+                      <label htmlFor="include-audio">Include audio</label>
+                      {!audioFile && <p className="note">(No audio file available)</p>}
+                    </div>
+                    
+                    {exportOptions.includeAudio && audioFile && (
+                      <div className="audio-option">
+                        <input 
+                          type="checkbox" 
+                          id="use-entire-soundtrack" 
+                          checked={exportOptions.useEntireSoundtrack}
+                          onChange={handleEntireSoundtrackChange}
+                          disabled={isExporting || !exportOptions.includeAudio}
+                        />
+                        <label htmlFor="use-entire-soundtrack">Use entire soundtrack</label>
+                        <p className="note">(Extends video to match full audio length)</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-          
-          {isExporting && (
-            <div className="export-progress">
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${progress}%` }}></div>
+              
+              {isExporting && (
+                <div className="export-progress">
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${progress}%` }}></div>
+                  </div>
+                  <p>{progress}% complete</p>
+                  <p className="note">
+                    Processing with Python... This may take a moment as we're using Pyodide to run Python in your browser.
+                  </p>
+                </div>
+              )}
+              
+              <div className="export-summary">
+                <p>
+                  <strong>Summary:</strong> Exporting {frames.filter(f => f.image).length} frames as {exportOptions.format.toUpperCase()} 
+                  at {exportOptions.resolution.width}x{exportOptions.resolution.height} with {exportOptions.quality}% quality
+                  {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && 
+                    ` ${exportOptions.includeAudio && audioFile ? 'with' : 'without'} audio`}
+                  {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && 
+                    exportOptions.includeAudio && exportOptions.useEntireSoundtrack && audioFile && 
+                    ` (using entire soundtrack)`}
+                </p>
               </div>
-              <p>{progress}% complete</p>
-              <p className="note">
-                Processing with Python... This may take a moment as we're using Pyodide to run Python in your browser.
-              </p>
-            </div>
+            </>
           )}
-          
-          <div className="export-summary">
-            <p>
-              <strong>Summary:</strong> Exporting {frames.filter(f => f.image).length} frames as {exportOptions.format.toUpperCase()} 
-              at {exportOptions.resolution.width}x{exportOptions.resolution.height} with {exportOptions.quality}% quality
-              {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && 
-                ` ${exportOptions.includeAudio && audioFile ? 'with' : 'without'} audio`}
-              {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && 
-                exportOptions.includeAudio && exportOptions.useEntireSoundtrack && audioFile && 
-                ` (using entire soundtrack)`}
-            </p>
-          </div>
         </div>
         
         <div className="modal-footer">
           <button 
             className="cancel-button" 
             onClick={onClose}
-            disabled={isExporting}
+            disabled={isExporting || isPyodideLoading}
           >
             Cancel
           </button>
           <button 
             className="export-button" 
             onClick={handleExport}
-            disabled={isExporting || frames.filter(f => f.image).length === 0}
+            disabled={isExporting || isPyodideLoading || frames.filter(f => f.image).length === 0}
           >
-            {isExporting ? 'Exporting...' : 'Export'}
+            {isExporting ? 'Exporting...' : isPyodideLoading ? 'Loading...' : 'Export'}
           </button>
         </div>
       </div>
