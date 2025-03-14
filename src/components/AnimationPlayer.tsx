@@ -28,6 +28,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
+  const [lastSelectedFrame, setLastSelectedFrame] = useState<number | null>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const audioUrl = useRef<string>('');
@@ -164,6 +165,11 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     if (wavesurferRef.current && isWaveformReady) {
       console.log('Toggling play/pause');
       
+      // Store the selected frame before playing
+      if (!isPlaying && selectedFrame !== null) {
+        setLastSelectedFrame(selectedFrame);
+      }
+      
       // Directly use playPause without trying to access audio context
       // WaveSurfer handles this internally
       wavesurferRef.current.playPause();
@@ -175,8 +181,28 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   // Handle stop (go to start)
   const handleStop = () => {
     if (wavesurferRef.current) {
+      // Remember the current selected frame before stopping
+      if (selectedFrame !== null) {
+        setLastSelectedFrame(selectedFrame);
+      }
+      
+      // Stop the playback
       wavesurferRef.current.stop();
-      setSelectedFrame(0);
+      
+      // If we have a last selected frame, restore it after a short delay
+      // to allow the waveform to update
+      if (lastSelectedFrame !== null) {
+        setTimeout(() => {
+          setSelectedFrame(lastSelectedFrame);
+          if (wavesurferRef.current) {
+            const frameTime = frames[lastSelectedFrame].time;
+            wavesurferRef.current.seekTo(frameTime / duration);
+          }
+        }, 50);
+      } else {
+        // Default to first frame if no last selected frame
+        setSelectedFrame(0);
+      }
     }
   };
 
@@ -376,6 +402,9 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   // Start playback from selected frame
   const playFromSelectedFrame = () => {
     if (wavesurferRef.current && selectedFrame !== null && isWaveformReady) {
+      // Store the selected frame before playing
+      setLastSelectedFrame(selectedFrame);
+      
       const frameTime = frames[selectedFrame].time;
       wavesurferRef.current.seekTo(frameTime / duration);
       wavesurferRef.current.play();
