@@ -445,13 +445,18 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         
         // Update spotlight position for the filter effect
         if (isPlaying) {
-          // Calculate the relative position of the selected frame within the container
-          const containerRect = container.getBoundingClientRect();
+          // Get the element's position relative to the viewport
           const elementRect = selectedElement.getBoundingClientRect();
-          const relativeX = ((elementRect.left + elementRect.width / 2) - containerRect.left) / containerRect.width * 100;
+          const containerRect = container.getBoundingClientRect();
           
-          // Update the CSS variable for the spotlight position
+          // Calculate the horizontal position for the spotlight
+          const viewportX = elementRect.left + (elementRect.width / 2);
+          const relativeX = (viewportX / window.innerWidth) * 100;
+          
+          // Set the spotlight position and dimensions
           container.style.setProperty('--spotlight-x', `${relativeX}%`);
+          container.style.setProperty('--spotlight-top', `${containerRect.top}px`);
+          container.style.setProperty('--spotlight-height', `${containerRect.height}px`);
         }
       }
     }
@@ -526,6 +531,45 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     const walk = (x - startX) * 2; // Scroll speed multiplier
     framesContainerRef.current.scrollLeft = scrollLeft - walk;
   };
+
+  // Update spotlight position when window is resized
+  useEffect(() => {
+    if (isPlaying && selectedFrame !== null && framesContainerRef.current && frameRefs.current[selectedFrame]) {
+      const container = framesContainerRef.current;
+      
+      const updateSpotlightPosition = () => {
+        const selectedElement = frameRefs.current[selectedFrame];
+        
+        if (container && selectedElement) {
+          // Get the element's position relative to the viewport
+          const elementRect = selectedElement.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          
+          // Calculate the horizontal position for the spotlight
+          const viewportX = elementRect.left + (elementRect.width / 2);
+          const relativeX = (viewportX / window.innerWidth) * 100;
+          
+          // Set the spotlight position and dimensions
+          container.style.setProperty('--spotlight-x', `${relativeX}%`);
+          container.style.setProperty('--spotlight-top', `${containerRect.top}px`);
+          container.style.setProperty('--spotlight-height', `${containerRect.height}px`);
+        }
+      };
+      
+      // Update position initially
+      updateSpotlightPosition();
+      
+      // Add event listeners for resize and scroll
+      window.addEventListener('resize', updateSpotlightPosition);
+      container.addEventListener('scroll', updateSpotlightPosition);
+      
+      // Clean up
+      return () => {
+        window.removeEventListener('resize', updateSpotlightPosition);
+        container.removeEventListener('scroll', updateSpotlightPosition);
+      };
+    }
+  }, [isPlaying, selectedFrame]);
 
   return (
     <div className="player-container">

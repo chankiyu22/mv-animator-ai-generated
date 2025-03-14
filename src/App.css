@@ -63,11 +63,11 @@ h1 {
 
 .frames-container.playing::before {
   content: '';
-  position: absolute;
-  top: 0;
+  position: fixed;
+  top: var(--spotlight-top, 0);
   left: 0;
   right: 0;
-  bottom: 0;
+  height: var(--spotlight-height, 100px);
   background: radial-gradient(
     circle at var(--spotlight-x, 50%) center,
     transparent 30%,
