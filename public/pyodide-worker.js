@@ -294,7 +294,15 @@ async function generateMovie(options) {
                 ${includeAudio ? "True" : "False"},
                 None  # Audio data would go here
             )
-            result  # Return the result
+            # Convert Python dict to JavaScript object
+            import json
+            if isinstance(result, dict):
+                js.console.log("Result is a dictionary:", result)
+                result_json = json.dumps(result)
+                js.console.log("Result as JSON:", result_json)
+                return result_json
+            else:
+                result  # Return the result directly
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
@@ -302,20 +310,31 @@ async function generateMovie(options) {
             raise
       `);
       
-      console.log("Video generation result:", result);
+      console.log("Video generation raw result:", result);
+      
+      // Parse the result if it's a JSON string
+      let parsedResult = result;
+      if (typeof result === 'string') {
+        try {
+          parsedResult = JSON.parse(result);
+          console.log("Parsed result:", parsedResult);
+        } catch (e) {
+          console.log("Result is not JSON, using as is");
+        }
+      }
       
       // Check if result exists and has an error property
-      if (result && typeof result === 'object' && result.error) {
-        throw new Error(result.error);
+      if (parsedResult && typeof parsedResult === 'object' && parsedResult.error) {
+        throw new Error(parsedResult.error);
       }
       
       // If we got here but result is not valid, throw a generic error
-      if (!result) {
+      if (!parsedResult) {
         throw new Error("Video generation failed: No result returned from Python");
       }
       
       return {
-        data: result,
+        data: typeof parsedResult === 'string' ? parsedResult : JSON.stringify(parsedResult),
         mimeType: format === 'mp4' ? 'video/mp4' : 'video/webm',
         extension: format
       };
