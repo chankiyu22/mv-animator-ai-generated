@@ -21,7 +21,15 @@ self.onmessage = async function(e) {
         await initPyodide();
       }
       const result = await generateMovie(data);
-      self.postMessage({ type: 'complete', result });
+      
+      // Ensure result is serializable before posting
+      const serializableResult = {
+        data: result.data,
+        mimeType: result.mimeType,
+        extension: result.extension
+      };
+      
+      self.postMessage({ type: 'complete', result: serializableResult });
     }
   } catch (error) {
     self.postMessage({ type: 'error', error: error.message });
@@ -170,65 +178,80 @@ async function generateMovie(options) {
   if (format === 'gif') {
     // Generate GIF
     const frameImagesJson = JSON.stringify(frameImages);
-    result = await pyodide.runPythonAsync(`
-      frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
-      create_gif(
-        frameImages,
-        ${fps},
-        ${quality},
-        ${resolution.width},
-        ${resolution.height}
-      )
-    `);
-    return {
-      data: result,
-      mimeType: 'image/gif',
-      extension: 'gif'
-    };
+    try {
+      result = await pyodide.runPythonAsync(`
+        frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
+        create_gif(
+          frameImages,
+          ${fps},
+          ${quality},
+          ${resolution.width},
+          ${resolution.height}
+        )
+      `);
+      return {
+        data: result,
+        mimeType: 'image/gif',
+        extension: 'gif'
+      };
+    } catch (error) {
+      console.error("GIF generation error:", error);
+      throw new Error(`GIF generation failed: ${error.message}`);
+    }
   } else if (format === 'png') {
     // Generate PNG sequence
     const frameImagesJson = JSON.stringify(frameImages);
-    result = await pyodide.runPythonAsync(`
-      frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
-      create_png_sequence(
-        frameImages,
-        ${resolution.width},
-        ${resolution.height},
-        ${quality}
-      )
-    `);
-    return {
-      data: result,
-      mimeType: 'application/zip',
-      extension: 'zip'
-    };
+    try {
+      result = await pyodide.runPythonAsync(`
+        frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
+        create_png_sequence(
+          frameImages,
+          ${resolution.width},
+          ${resolution.height},
+          ${quality}
+        )
+      `);
+      return {
+        data: result,
+        mimeType: 'application/zip',
+        extension: 'zip'
+      };
+    } catch (error) {
+      console.error("PNG sequence generation error:", error);
+      throw new Error(`PNG sequence generation failed: ${error.message}`);
+    }
   } else if (format === 'mp4' || format === 'webm') {
     // For video formats, we'll return an error message for now
     // as full video generation requires additional libraries
     const frameImagesJson = JSON.stringify(frameImages);
-    result = await pyodide.runPythonAsync(`
-      frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
-      create_video(
-        frameImages,
-        ${fps},
-        "${format}",
-        ${resolution.width},
-        ${resolution.height},
-        ${quality},
-        ${includeAudio ? "True" : "False"},
-        None  # Audio data would go here
-      )
-    `);
-    
-    if (result.error) {
-      throw new Error(result.error);
+    try {
+      result = await pyodide.runPythonAsync(`
+        frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
+        create_video(
+          frameImages,
+          ${fps},
+          "${format}",
+          ${resolution.width},
+          ${resolution.height},
+          ${quality},
+          ${includeAudio ? "True" : "False"},
+          None  # Audio data would go here
+        )
+      `);
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      
+      return {
+        data: result,
+        mimeType: format === 'mp4' ? 'video/mp4' : 'video/webm',
+        extension: format
+      };
+    } catch (error) {
+      console.error("Video generation error:", error);
+      throw new Error(`Video generation failed: ${error.message}`);
     }
-    
-    return {
-      data: result,
-      mimeType: format === 'mp4' ? 'video/mp4' : 'video/webm',
-      extension: format
-    };
   } else {
     throw new Error(`Unsupported format: ${format}`);
   }
