@@ -193,14 +193,14 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         // Center the element in the container
         const scrollPosition = elementLeft - (containerWidth / 2) + (elementWidth / 2);
         
-        // Smooth scroll to the position
+        // Use different scroll behavior based on playback state
         container.scrollTo({
           left: Math.max(0, scrollPosition),
-          behavior: 'smooth'
+          behavior: isPlaying ? 'auto' : 'smooth'
         });
       }
     }
-  }, [selectedFrame]);
+  }, [selectedFrame, isPlaying]);
 
   return (
     <div className="player-container">
