@@ -190,11 +190,150 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   };
 
   // Handle image upload for a frame
-  const handleImageUpload = (image: string) => {
-    if (selectedFrame !== null) {
+  const handleImageUpload = (image: string, frameId: number = selectedFrame!) => {
+    if (frameId !== null && frameId >= 0 && frameId < frames.length) {
       setFrames(frames.map(frame => 
-        frame.id === selectedFrame ? { ...frame, image } : frame
+        frame.id === frameId ? { ...frame, image } : frame
       ));
+    }
+  };
+
+  // Handle frame drag over
+  const handleFrameDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.add('drag-over');
+  };
+
+  // Handle frame drag leave
+  const handleFrameDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
+  };
+
+  // Handle frame drop
+  const handleFrameDrop = (e: React.DragEvent<HTMLDivElement>, frameId: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      
+      if (file.type === 'image/gif') {
+        // Process GIF directly on the frame
+        processGifForFrame(file, frameId);
+      } else if (file.type.startsWith('image/')) {
+        // Process regular image
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target && typeof e.target.result === 'string') {
+            handleImageUpload(e.target.result, frameId);
+          }
+        };
+        reader.readAsDataURL(file);
+      } else {
+        alert('Please upload an image file');
+      }
+    }
+  };
+
+  // Process GIF for direct frame drop
+  const processGifForFrame = async (file: File, frameId: number) => {
+    try {
+      // Import dynamically to avoid issues
+      const { parseGIF, decompressFrames } = await import('gifuct-js');
+      
+      // Read the file as ArrayBuffer
+      const buffer = await file.arrayBuffer();
+      
+      // Parse the GIF
+      const gif = parseGIF(new Uint8Array(buffer));
+      const frames = decompressFrames(gif, true);
+      
+      // Calculate total duration in seconds
+      // GIF delays are in milliseconds
+      const totalDurationMs = frames.reduce((sum, frame) => sum + frame.delay, 0);
+      const totalDuration = totalDurationMs / 1000; // Convert milliseconds to seconds
+      
+      console.log(`GIF info: ${frames.length} frames, total duration: ${totalDuration}s`);
+      
+      // Create canvas to render frames
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        throw new Error('Could not get canvas context');
+      }
+      
+      // Set canvas dimensions to match the GIF dimensions
+      canvas.width = frames[0].dims.width;
+      canvas.height = frames[0].dims.height;
+      
+      // Process each frame
+      const frameImages: string[] = [];
+      
+      // For GIFs, we need to handle disposal methods and frame composition
+      let previousImageData: ImageData | null = null;
+      
+      for (let i = 0; i < frames.length; i++) {
+        const frame = frames[i];
+        
+        // Handle disposal method
+        if (i > 0) {
+          const prevFrame = frames[i - 1];
+          
+          // Disposal method:
+          // 0 - No disposal specified
+          // 1 - Do not dispose (leave as is)
+          // 2 - Restore to background color
+          // 3 - Restore to previous state
+          
+          if (prevFrame.disposalType === 2) {
+            // Clear the canvas to transparent
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          } else if (prevFrame.disposalType === 3 && previousImageData) {
+            // Restore to previous state
+            ctx.putImageData(previousImageData, 0, 0);
+          }
+        } else {
+          // First frame, clear canvas
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // Save the current state before drawing the new frame
+        previousImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        
+        // Create ImageData from the frame's pixels
+        const imageData = new ImageData(
+          new Uint8ClampedArray(frame.patch),
+          frame.dims.width,
+          frame.dims.height
+        );
+        
+        // Draw the frame at its position
+        ctx.putImageData(imageData, frame.dims.left, frame.dims.top);
+        
+        // Convert to data URL
+        const dataUrl = canvas.toDataURL('image/png');
+        frameImages.push(dataUrl);
+      }
+      
+      // Set the first frame as the current frame's image
+      if (frameImages.length > 0) {
+        handleImageUpload(frameImages[0], frameId);
+      }
+      
+      // Process the GIF for subsequent frames
+      handleGifProcessed({
+        frames: frameImages,
+        totalDuration
+      }, frameId);
+      
+    } catch (error) {
+      console.error('Error processing GIF:', error);
+      alert('Error processing GIF. Please try another file.');
     }
   };
 
@@ -378,6 +517,9 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
             className={`frame ${selectedFrame === frame.id ? 'selected' : ''}`}
             onClick={() => handleFrameClick(frame.id)}
             title={`Frame ${frame.id} (${frame.time.toFixed(2)}s)`}
+            onDragOver={handleFrameDragOver}
+            onDragLeave={handleFrameDragLeave}
+            onDrop={(e) => handleFrameDrop(e, frame.id)}
           >
             {frame.image ? (
               <img src={frame.image} alt={`Frame ${frame.id}`} className="frame-image" />
@@ -400,7 +542,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         selectedFrame !== null && (
           <FrameEditor 
             frame={frames[selectedFrame]} 
-            onImageUpload={handleImageUpload}
+            onImageUpload={(image) => handleImageUpload(image)}
             onGifProcessed={handleGifProcessed}
           />
         )
