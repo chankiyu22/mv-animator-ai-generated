@@ -276,6 +276,18 @@ async function generateMovie(options) {
   } else if (format === 'mp4' || format === 'webm') {
     // For video formats, we'll return an error message for now
     try {
+      // We know video generation is not supported, so let's directly return an error message
+      console.log("Video format requested, returning informative error");
+      
+      return {
+        data: JSON.stringify({
+          error: "Full video generation requires additional libraries not available in Pyodide. Please use GIF or PNG sequence export."
+        }),
+        mimeType: format === 'mp4' ? 'video/mp4' : 'video/webm',
+        extension: format
+      };
+      
+      /* Commenting out the Python code that's causing issues
       // Stringify and escape the frame images
       const frameImagesJson = JSON.stringify(frameImages);
       console.log(`JSON stringified frames, length: ${frameImagesJson.length}`);
@@ -338,6 +350,7 @@ async function generateMovie(options) {
         mimeType: format === 'mp4' ? 'video/mp4' : 'video/webm',
         extension: format
       };
+      */
     } catch (error) {
       console.error("Video generation error:", error);
       throw new Error(`Video generation failed: ${error.message}`);
