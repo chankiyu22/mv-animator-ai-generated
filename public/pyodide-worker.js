@@ -304,8 +304,14 @@ async function generateMovie(options) {
       
       console.log("Video generation result:", result);
       
-      if (result.error) {
+      // Check if result exists and has an error property
+      if (result && typeof result === 'object' && result.error) {
         throw new Error(result.error);
+      }
+      
+      // If we got here but result is not valid, throw a generic error
+      if (!result) {
+        throw new Error("Video generation failed: No result returned from Python");
       }
       
       return {
