@@ -92,6 +92,7 @@ h1 {
   z-index: 10;
   position: relative;
   animation: frame-focus 2s infinite alternate;
+  border-color: transparent;
 }
 
 @keyframes frame-focus {
