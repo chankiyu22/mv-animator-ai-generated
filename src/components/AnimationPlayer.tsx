@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import FrameEditor from './FrameEditor';
 import AnimationPreview from './AnimationPreview';
+import ExportModal from './ExportModal';
 
 interface AnimationPlayerProps {
   audioFile: File;
@@ -30,6 +31,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const [scrollLeft, setScrollLeft] = useState(0);
   const [lastSelectedFrame, setLastSelectedFrame] = useState<number | null>(null);
   const [visibleFrames, setVisibleFrames] = useState<{ start: number; end: number }>({ start: 0, end: 50 });
+  const [showExportModal, setShowExportModal] = useState(false);
   const waveformRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const audioUrl = useRef<string>('');
@@ -632,6 +634,11 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     );
   };
 
+  // Toggle export modal
+  const toggleExportModal = () => {
+    setShowExportModal(!showExportModal);
+  };
+
   return (
     <div className="player-container">
       <div className="controls">
@@ -644,6 +651,13 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
             Play from Selected Frame
           </button>
         )}
+        <button 
+          onClick={toggleExportModal}
+          disabled={frames.length === 0 || frames.every(frame => !frame.image)}
+          className="export-button"
+        >
+          Export
+        </button>
       </div>
       
       <div 
@@ -702,6 +716,17 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
             onGifProcessed={handleGifProcessed}
           />
         )
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <ExportModal 
+          frames={frames}
+          fps={FPS}
+          audioFile={audioFile}
+          onClose={toggleExportModal}
+          isOpen={showExportModal}
+        />
       )}
     </div>
   );
