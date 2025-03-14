@@ -171,7 +171,7 @@ async function generateMovie(options) {
     // Generate GIF
     result = await pyodide.runPythonAsync(`
       create_gif(
-        js.Array.to_py(${JSON.stringify(frameImages)}),
+        js.Array.from_js(${JSON.stringify(frameImages)}),
         ${fps},
         ${quality},
         ${resolution.width},
@@ -187,7 +187,7 @@ async function generateMovie(options) {
     // Generate PNG sequence
     result = await pyodide.runPythonAsync(`
       create_png_sequence(
-        js.Array.to_py(${JSON.stringify(frameImages)}),
+        js.Array.from_js(${JSON.stringify(frameImages)}),
         ${resolution.width},
         ${resolution.height},
         ${quality}
@@ -203,7 +203,7 @@ async function generateMovie(options) {
     // as full video generation requires additional libraries
     result = await pyodide.runPythonAsync(`
       create_video(
-        js.Array.to_py(${JSON.stringify(frameImages)}),
+        js.Array.from_js(${JSON.stringify(frameImages)}),
         ${fps},
         "${format}",
         ${resolution.width},
