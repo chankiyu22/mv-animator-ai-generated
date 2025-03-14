@@ -23,6 +23,7 @@ interface ExportOptions {
   format: ExportFormat;
   quality: number;
   includeAudio: boolean;
+  useEntireSoundtrack: boolean;
   resolution: {
     width: number;
     height: number;
@@ -36,6 +37,7 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
     format: 'gif',
     quality: 80,
     includeAudio: true,
+    useEntireSoundtrack: false,
     resolution: {
       width: 640,
       height: 480
@@ -83,6 +85,14 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
     setExportOptions({
       ...exportOptions,
       includeAudio: e.target.checked
+    });
+  };
+
+  // Handle entire soundtrack option change
+  const handleEntireSoundtrackChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setExportOptions({
+      ...exportOptions,
+      useEntireSoundtrack: e.target.checked
     });
   };
 
@@ -245,10 +255,13 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
       const stream = canvas.captureStream(fps);
       
       // Add audio track if needed
+      let audioContext: AudioContext | null = null;
+      let audioSource: AudioBufferSourceNode | null = null;
+      
       if (exportOptions.includeAudio && audioFile) {
-        const audioContext = new AudioContext();
+        audioContext = new AudioContext();
         const audioBuffer = await audioFile.arrayBuffer();
-        const audioSource = audioContext.createBufferSource();
+        audioSource = audioContext.createBufferSource();
         audioSource.buffer = await audioContext.decodeAudioData(audioBuffer);
         const audioDestination = audioContext.createMediaStreamDestination();
         audioSource.connect(audioDestination);
@@ -257,9 +270,6 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
         audioDestination.stream.getAudioTracks().forEach(track => {
           stream.addTrack(track);
         });
-        
-        // Start audio playback
-        audioSource.start();
       }
 
       // Set up MediaRecorder with appropriate MIME type
@@ -292,6 +302,22 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
       // Start recording
       recorder.start();
 
+      // Calculate total duration based on export options
+      let totalDuration: number;
+      
+      if (exportOptions.useEntireSoundtrack && audioSource && audioSource.buffer) {
+        // Use the entire audio duration
+        totalDuration = audioSource.buffer.duration * 1000; // Convert to milliseconds
+      } else {
+        // Use only the duration of the animation frames
+        totalDuration = (framesToExport[framesToExport.length - 1].time - framesToExport[0].time) * 1000;
+      }
+
+      // Start audio playback if needed
+      if (audioSource) {
+        audioSource.start();
+      }
+
       // Draw each frame at the appropriate time
       let frameIndex = 0;
       const frameDuration = 1000 / fps;
@@ -299,7 +325,22 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
       
       const drawNextFrame = async () => {
         if (frameIndex >= framesToExport.length) {
-          recorder.stop();
+          // If using entire soundtrack, wait until the audio finishes before stopping
+          if (exportOptions.useEntireSoundtrack && audioSource && audioSource.buffer) {
+            const elapsed = performance.now() - startTime;
+            const remainingTime = Math.max(0, totalDuration - elapsed);
+            
+            if (remainingTime > 0) {
+              // Keep the last frame visible until audio finishes
+              setTimeout(() => {
+                recorder.stop();
+              }, remainingTime);
+            } else {
+              recorder.stop();
+            }
+          } else {
+            recorder.stop();
+          }
           return;
         }
 
@@ -317,7 +358,11 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
         });
 
         // Update progress
-        setProgress(Math.floor((frameIndex / framesToExport.length) * 100));
+        const progressValue = exportOptions.useEntireSoundtrack && audioSource && audioSource.buffer
+          ? Math.floor(((performance.now() - startTime) / totalDuration) * 100)
+          : Math.floor((frameIndex / framesToExport.length) * 100);
+        
+        setProgress(Math.min(progressValue, 99)); // Cap at 99% until complete
         
         frameIndex++;
         
@@ -502,6 +547,20 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
                   <label htmlFor="include-audio">Include audio</label>
                   {!audioFile && <p className="note">(No audio file available)</p>}
                 </div>
+                
+                {exportOptions.includeAudio && audioFile && (
+                  <div className="audio-option">
+                    <input 
+                      type="checkbox" 
+                      id="use-entire-soundtrack" 
+                      checked={exportOptions.useEntireSoundtrack}
+                      onChange={handleEntireSoundtrackChange}
+                      disabled={isExporting || !exportOptions.includeAudio}
+                    />
+                    <label htmlFor="use-entire-soundtrack">Use entire soundtrack</label>
+                    <p className="note">(Extends video to match full audio length)</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -521,6 +580,9 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
               at {exportOptions.resolution.width}x{exportOptions.resolution.height} with {exportOptions.quality}% quality
               {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && 
                 ` ${exportOptions.includeAudio && audioFile ? 'with' : 'without'} audio`}
+              {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && 
+                exportOptions.includeAudio && exportOptions.useEntireSoundtrack && audioFile && 
+                ` (using entire soundtrack)`}
             </p>
           </div>
         </div>
