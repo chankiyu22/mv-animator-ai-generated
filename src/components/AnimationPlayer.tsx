@@ -223,11 +223,12 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
             ref={el => { frameRefs.current[index] = el; }}
             className={`frame ${selectedFrame === frame.id ? 'selected' : ''}`}
             onClick={() => handleFrameClick(frame.id)}
+            title={`Frame ${frame.id} (${frame.time.toFixed(2)}s)`}
           >
             {frame.image ? (
               <img src={frame.image} alt={`Frame ${frame.id}`} className="frame-image" />
             ) : (
-              <span>{frame.id}</span>
+              <div className="empty-frame"></div>
             )}
           </div>
         ))}
