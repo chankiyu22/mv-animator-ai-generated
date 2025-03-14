@@ -25,6 +25,9 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isWaveformReady, setIsWaveformReady] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
   const waveformRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const audioUrl = useRef<string>('');
@@ -319,6 +322,32 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   }, [frames.length]);
 
+  // Handle mouse down for drag scrolling
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!framesContainerRef.current) return;
+    
+    setIsDragging(true);
+    setStartX(e.pageX - framesContainerRef.current.offsetLeft);
+    setScrollLeft(framesContainerRef.current.scrollLeft);
+  };
+
+  // Handle mouse leave and mouse up to stop dragging
+  const handleMouseLeaveOrUp = () => {
+    setIsDragging(false);
+  };
+
+  // Handle mouse move for drag scrolling
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !framesContainerRef.current) return;
+    
+    // Prevent default to avoid text selection during drag
+    e.preventDefault();
+    
+    const x = e.pageX - framesContainerRef.current.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll speed multiplier
+    framesContainerRef.current.scrollLeft = scrollLeft - walk;
+  };
+
   return (
     <div className="player-container">
       <div className="controls">
@@ -333,7 +362,15 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         )}
       </div>
       
-      <div className="frames-container" ref={framesContainerRef}>
+      <div 
+        className="frames-container" 
+        ref={framesContainerRef}
+        onMouseDown={handleMouseDown}
+        onMouseLeave={handleMouseLeaveOrUp}
+        onMouseUp={handleMouseLeaveOrUp}
+        onMouseMove={handleMouseMove}
+        style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+      >
         {frames.map((frame, index) => (
           <div
             key={frame.id}
