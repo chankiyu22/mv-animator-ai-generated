@@ -13,6 +13,11 @@ interface FrameData {
   image: string | null;
 }
 
+interface GifFrameData {
+  image: string;
+  delay: number; // Delay in 1/100th of a second
+}
+
 const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const [frames, setFrames] = useState<FrameData[]>([]);
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null);
@@ -173,20 +178,45 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   };
 
-  // Handle GIF processing and fill subsequent frames
-  const handleGifProcessed = (gifFrames: string[], startFrameId: number) => {
+  // Handle GIF processing and fill subsequent frames with proper timing
+  const handleGifProcessed = (gifFrames: GifFrameData[], startFrameId: number) => {
+    if (frames.length === 0) return;
+    
     // Create a copy of the current frames
     const updatedFrames = [...frames];
     
-    // Fill subsequent frames with GIF frames
+    // Calculate the total duration of the GIF in seconds
+    const totalGifDuration = gifFrames.reduce((sum, frame) => sum + frame.delay / 100, 0);
+    
+    // Calculate how many audio frames each GIF frame should span based on its delay
+    let currentAudioFrameIndex = startFrameId;
+    let currentGifTimePosition = 0;
+    
+    // For each GIF frame, determine which audio frames it should cover
     for (let i = 0; i < gifFrames.length; i++) {
-      const frameIndex = startFrameId + i;
-      if (frameIndex < updatedFrames.length) {
-        updatedFrames[frameIndex] = {
-          ...updatedFrames[frameIndex],
-          image: gifFrames[i]
-        };
+      const gifFrame = gifFrames[i];
+      const gifFrameDuration = gifFrame.delay / 100; // Convert to seconds
+      
+      // Calculate the end time position for this GIF frame
+      const nextGifTimePosition = currentGifTimePosition + gifFrameDuration;
+      
+      // Calculate the audio frame range this GIF frame should cover
+      const startAudioFrame = currentAudioFrameIndex;
+      const endAudioFrame = Math.floor(startFrameId + (nextGifTimePosition / totalGifDuration) * gifFrames.length);
+      
+      // Apply the GIF frame to the corresponding audio frames
+      for (let j = startAudioFrame; j < endAudioFrame; j++) {
+        if (j < updatedFrames.length) {
+          updatedFrames[j] = {
+            ...updatedFrames[j],
+            image: gifFrame.image
+          };
+        }
       }
+      
+      // Update for the next iteration
+      currentAudioFrameIndex = endAudioFrame;
+      currentGifTimePosition = nextGifTimePosition;
     }
     
     // Update frames state

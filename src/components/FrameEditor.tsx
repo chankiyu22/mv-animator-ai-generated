@@ -7,10 +7,15 @@ interface FrameData {
   image: string | null;
 }
 
+interface GifFrameData {
+  image: string;
+  delay: number; // Delay in 1/100th of a second
+}
+
 interface FrameEditorProps {
   frame: FrameData;
   onImageUpload: (image: string) => void;
-  onGifProcessed?: (frames: string[], startFrameId: number) => void;
+  onGifProcessed?: (gifFrames: GifFrameData[], startFrameId: number) => void;
 }
 
 const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps) => {
@@ -82,7 +87,7 @@ const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps)
       canvas.height = frames[0].dims.height;
       
       // Process each frame
-      const frameImages: string[] = [];
+      const gifFrames: GifFrameData[] = [];
       
       // For GIFs, we need to handle disposal methods and frame composition
       let previousImageData: ImageData | null = null;
@@ -127,16 +132,21 @@ const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps)
         
         // Convert to data URL
         const dataUrl = canvas.toDataURL('image/png');
-        frameImages.push(dataUrl);
+        
+        // Add frame with its delay
+        gifFrames.push({
+          image: dataUrl,
+          delay: frame.delay || 10 // Default to 10 (10fps) if not specified
+        });
       }
       
       // Set the first frame as the current frame's image
-      if (frameImages.length > 0) {
-        onImageUpload(frameImages[0]);
+      if (gifFrames.length > 0) {
+        onImageUpload(gifFrames[0].image);
       }
       
-      // Pass the rest of the frames to be processed
-      onGifProcessed(frameImages, frame.id);
+      // Pass the frames with their delays to be processed
+      onGifProcessed(gifFrames, frame.id);
       
     } catch (error) {
       console.error('Error processing GIF:', error);
@@ -193,7 +203,7 @@ const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps)
           style={{ height: '200px' }}
         >
           <p>Drag and drop an image here, or click to select an image</p>
-          <p className="gif-support">GIF files will automatically fill subsequent frames</p>
+          <p className="gif-support">GIF files will automatically fill subsequent frames with proper timing</p>
           {isProcessingGif && <p>Processing GIF... This may take a moment.</p>}
         </div>
       )}
