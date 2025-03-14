@@ -52,6 +52,11 @@ h1 {
   position: relative;
   scroll-behavior: auto;
   align-items: center;
+  transition: background-color 0.3s ease;
+}
+
+.frames-container.playing {
+  background-color: #e0e0e0;
 }
 
 .frames-padding {
@@ -81,6 +86,31 @@ h1 {
   box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.3);
   transform: scale(1.05);
   z-index: 1;
+}
+
+/* Spotlight effect styles */
+.frames-container.playing .frame {
+  opacity: 0.4;
+  filter: grayscale(50%);
+  transition: opacity 0.3s ease, filter 0.3s ease, transform 0.2s ease;
+}
+
+.frames-container.playing .frame.selected {
+  opacity: 1;
+  filter: grayscale(0%);
+  transform: scale(1.1);
+  box-shadow: 0 0 10px rgba(100, 108, 255, 0.5);
+  z-index: 2;
+  animation: spotlight-pulse 1.5s infinite alternate;
+}
+
+@keyframes spotlight-pulse {
+  0% {
+    box-shadow: 0 0 5px rgba(100, 108, 255, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(100, 108, 255, 0.8);
+  }
 }
 
 .frame.drag-over {
