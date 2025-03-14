@@ -299,26 +299,44 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           chunks.push(e.data);
+          // Update status with chunk information
+          setExportStatus(`Captured video chunk <span class="export-status-numeric">${chunks.length}</span> (<span class="export-status-numeric">${Math.round(e.data.size / 1024)}</span> KB)`);
         }
       };
 
       recorder.onstop = () => {
         setExportStatus('Finalizing video...');
-        const blob = new Blob(chunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `animation-${Date.now()}.${format}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        setProgress(100);
-        setExportStatus('Video export complete!');
+        
+        // Simulate aggregation progress
+        let aggregationProgress = 0;
+        const totalChunks = chunks.length;
+        const aggregationInterval = setInterval(() => {
+          aggregationProgress += 1;
+          const percent = Math.min(Math.round((aggregationProgress / totalChunks) * 100), 99);
+          setExportStatus(`Aggregating video chunks: <span class="export-status-numeric">${aggregationProgress}</span>/<span class="export-status-numeric">${totalChunks}</span> (<span class="export-status-numeric">${percent}</span>%)`);
+          
+          if (aggregationProgress >= totalChunks) {
+            clearInterval(aggregationInterval);
+            setExportStatus('Creating downloadable file...');
+            
+            // Create the final blob after showing aggregation progress
+            const blob = new Blob(chunks, { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `animation-${Date.now()}.${format}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            setProgress(100);
+            setExportStatus(`Video export complete! (<span class="export-status-numeric">${Math.round(blob.size / 1024)}</span> KB)`);
+          }
+        }, 100); // Update every 100ms for smooth progress indication
       };
 
-      // Start recording
-      recorder.start();
+      // Request data in chunks to show progress during recording
+      recorder.start(1000); // Collect data every second
       setExportStatus('Recording video frames...');
 
       // Calculate total duration based on export options
@@ -388,7 +406,7 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
         setProgress(Math.min(progressValue, 99)); // Cap at 99% until complete
         
         // Update status with frame information
-        setExportStatus(`Processing frame ${frameIndex + 1}/${framesToExport.length} (${progressValue}%)...`);
+        setExportStatus(`Processing frame <span class="export-status-numeric">${frameIndex + 1}</span>/<span class="export-status-numeric">${framesToExport.length}</span> (<span class="export-status-numeric">${progressValue}</span>%)...`);
         
         frameIndex++;
         
@@ -601,7 +619,7 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
                 ></div>
               </div>
               <p className="progress-percentage">{progress}%</p>
-              {exportStatus && <p className="export-status">{exportStatus}</p>}
+              {exportStatus && <p className="export-status" dangerouslySetInnerHTML={{ __html: exportStatus }}></p>}
               <p>Please wait while your animation is being exported...</p>
             </div>
           ) : (

@@ -312,6 +312,19 @@ button:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   animation: pulse 2s infinite;
+  font-family: monospace;
+}
+
+.export-status-numeric {
+  font-weight: bold;
+  color: #4f46e5;
+  background-color: #eef2ff;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  margin: 0 0.2rem;
+  display: inline-block;
+  min-width: 3rem;
+  text-align: center;
 }
 
 @keyframes pulse {
