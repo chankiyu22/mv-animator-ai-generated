@@ -7,10 +7,15 @@ interface FrameData {
   image: string | null;
 }
 
+interface GifInfo {
+  frames: string[];
+  totalDuration: number; // Total duration in seconds
+}
+
 interface FrameEditorProps {
   frame: FrameData;
   onImageUpload: (image: string) => void;
-  onGifProcessed?: (frames: string[], startFrameId: number) => void;
+  onGifProcessed?: (gifInfo: GifInfo, startFrameId: number) => void;
 }
 
 const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps) => {
@@ -68,6 +73,10 @@ const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps)
       // Parse the GIF
       const gif = parseGIF(new Uint8Array(buffer));
       const frames = decompressFrames(gif, true);
+      
+      // Calculate total duration in seconds
+      const totalDurationMs = frames.reduce((sum, frame) => sum + frame.delay, 0) * 10; // Convert to ms
+      const totalDuration = totalDurationMs / 1000; // Convert to seconds
       
       // Create canvas to render frames
       const canvas = document.createElement('canvas');
@@ -135,8 +144,11 @@ const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps)
         onImageUpload(frameImages[0]);
       }
       
-      // Pass the rest of the frames to be processed
-      onGifProcessed(frameImages, frame.id);
+      // Pass the GIF info to be processed
+      onGifProcessed({
+        frames: frameImages,
+        totalDuration
+      }, frame.id);
       
     } catch (error) {
       console.error('Error processing GIF:', error);
@@ -193,7 +205,7 @@ const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps)
           style={{ height: '200px' }}
         >
           <p>Drag and drop an image here, or click to select an image</p>
-          <p className="gif-support">GIF files will automatically fill subsequent frames</p>
+          <p className="gif-support">GIF files will automatically fill subsequent frames with proper length</p>
           {isProcessingGif && <p>Processing GIF... This may take a moment.</p>}
         </div>
       )}

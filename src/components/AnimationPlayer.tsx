@@ -13,6 +13,11 @@ interface FrameData {
   image: string | null;
 }
 
+interface GifInfo {
+  frames: string[];
+  totalDuration: number; // Total duration in seconds
+}
+
 const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const [frames, setFrames] = useState<FrameData[]>([]);
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null);
@@ -173,20 +178,31 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   };
 
-  // Handle GIF processing and fill subsequent frames
-  const handleGifProcessed = (gifFrames: string[], startFrameId: number) => {
+  // Handle GIF processing and align its length with the audio timeline
+  const handleGifProcessed = (gifInfo: GifInfo, startFrameId: number) => {
     // Create a copy of the current frames
     const updatedFrames = [...frames];
     
-    // Fill subsequent frames with GIF frames
-    for (let i = 0; i < gifFrames.length; i++) {
+    // Calculate how many audio frames the GIF should span
+    const audioFramesForGif = Math.ceil(gifInfo.totalDuration * FPS);
+    
+    // Determine the end frame ID (capped by the total number of frames)
+    const endFrameId = Math.min(startFrameId + audioFramesForGif, frames.length);
+    
+    // Calculate how many audio frames we actually have available
+    const availableFrames = endFrameId - startFrameId;
+    
+    // Distribute GIF frames evenly across the available audio frames
+    for (let i = 0; i < availableFrames; i++) {
+      // Calculate which GIF frame to use based on the relative position
+      const gifFrameIndex = Math.floor((i / availableFrames) * gifInfo.frames.length);
+      
+      // Apply the GIF frame to the corresponding audio frame
       const frameIndex = startFrameId + i;
-      if (frameIndex < updatedFrames.length) {
-        updatedFrames[frameIndex] = {
-          ...updatedFrames[frameIndex],
-          image: gifFrames[i]
-        };
-      }
+      updatedFrames[frameIndex] = {
+        ...updatedFrames[frameIndex],
+        image: gifInfo.frames[gifFrameIndex]
+      };
     }
     
     // Update frames state
