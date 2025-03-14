@@ -22,6 +22,8 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const waveformRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const audioUrl = useRef<string>('');
+  const framesContainerRef = useRef<HTMLDivElement>(null);
+  const frameRefs = useRef<(HTMLDivElement | null)[]>([]);
   const FPS = 24;
 
   // Initialize WaveSurfer
@@ -109,6 +111,8 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
     
     setFrames(newFrames);
+    // Reset frame refs array to match the new number of frames
+    frameRefs.current = Array(totalFrames).fill(null);
   };
 
   // Handle play/pause
@@ -174,6 +178,30 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   };
 
+  // Scroll to selected frame when it changes
+  useEffect(() => {
+    if (selectedFrame !== null && framesContainerRef.current && frameRefs.current[selectedFrame]) {
+      const container = framesContainerRef.current;
+      const selectedElement = frameRefs.current[selectedFrame];
+      
+      if (selectedElement) {
+        // Calculate the scroll position to center the selected frame
+        const containerWidth = container.clientWidth;
+        const elementLeft = selectedElement.offsetLeft;
+        const elementWidth = selectedElement.clientWidth;
+        
+        // Center the element in the container
+        const scrollPosition = elementLeft - (containerWidth / 2) + (elementWidth / 2);
+        
+        // Smooth scroll to the position
+        container.scrollTo({
+          left: Math.max(0, scrollPosition),
+          behavior: 'smooth'
+        });
+      }
+    }
+  }, [selectedFrame]);
+
   return (
     <div className="player-container">
       <div className="controls">
@@ -188,10 +216,11 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         )}
       </div>
       
-      <div className="frames-container">
-        {frames.map((frame) => (
+      <div className="frames-container" ref={framesContainerRef}>
+        {frames.map((frame, index) => (
           <div
             key={frame.id}
+            ref={el => { frameRefs.current[index] = el; }}
             className={`frame ${selectedFrame === frame.id ? 'selected' : ''}`}
             onClick={() => handleFrameClick(frame.id)}
           >
