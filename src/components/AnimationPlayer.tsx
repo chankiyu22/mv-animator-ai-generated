@@ -47,42 +47,35 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   }, [frames.length, FPS]);
 
-  // Initialize WaveSurfer - only once when component mounts
+  // Initialize and set up WaveSurfer
   useEffect(() => {
-    if (waveformRef.current && audioFile && !wavesurferRef.current) {
-      // Create audio URL
-      audioUrl.current = URL.createObjectURL(audioFile);
-      
-      // Initialize WaveSurfer
-      const wavesurfer = WaveSurfer.create({
-        container: waveformRef.current,
-        waveColor: '#4F4A85',
-        progressColor: '#383351',
-        cursorColor: '#646cff',
-        barWidth: 2,
-        barRadius: 3,
-        cursorWidth: 1,
-        height: 100,
-        barGap: 2,
-      });
-      
-      wavesurferRef.current = wavesurfer;
-      
-      // Load audio file
-      wavesurfer.load(audioUrl.current);
-      
-      // Clean up on unmount
-      return () => {
-        wavesurfer.destroy();
-        URL.revokeObjectURL(audioUrl.current);
-      };
+    if (!waveformRef.current || !audioFile) return;
+    
+    // Clean up previous instance if it exists
+    if (wavesurferRef.current) {
+      wavesurferRef.current.destroy();
     }
-  }, [audioFile]);
-
-  // Set up event listeners for WaveSurfer - separate from initialization
-  useEffect(() => {
-    const wavesurfer = wavesurferRef.current;
-    if (!wavesurfer) return;
+    
+    // Create audio URL
+    if (audioUrl.current) {
+      URL.revokeObjectURL(audioUrl.current);
+    }
+    audioUrl.current = URL.createObjectURL(audioFile);
+    
+    // Initialize WaveSurfer
+    const wavesurfer = WaveSurfer.create({
+      container: waveformRef.current,
+      waveColor: '#4F4A85',
+      progressColor: '#383351',
+      cursorColor: '#646cff',
+      barWidth: 2,
+      barRadius: 3,
+      cursorWidth: 1,
+      height: 100,
+      barGap: 2,
+    });
+    
+    wavesurferRef.current = wavesurfer;
     
     // Set up event listeners
     const handleReady = () => {
@@ -129,7 +122,10 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     wavesurfer.on('seek', updateOnSeek);
     wavesurfer.on('interaction', handleInteraction);
     
-    // Clean up event listeners
+    // Load audio file
+    wavesurfer.load(audioUrl.current);
+    
+    // Clean up on unmount or when audioFile changes
     return () => {
       wavesurfer.un('ready', handleReady);
       wavesurfer.un('play', handlePlay);
@@ -139,8 +135,10 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
       // @ts-expect-error - WaveSurfer types might not include all events
       wavesurfer.un('seek', updateOnSeek);
       wavesurfer.un('interaction', handleInteraction);
+      wavesurfer.destroy();
+      URL.revokeObjectURL(audioUrl.current);
     };
-  }, [FPS, frames.length, generateFrames, isPlaying]);
+  }, [audioFile, FPS, frames.length, generateFrames, isPlaying]);
 
   // Handle play/pause
   const togglePlayPause = () => {
