@@ -531,7 +531,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
       </div>
       
       <div 
-        className={`frames-container ${isPlaying ? 'playing' : ''}`}
+        className="frames-container" 
         ref={framesContainerRef}
         onMouseDown={handleMouseDown}
         onMouseLeave={handleMouseLeaveOrUp}
