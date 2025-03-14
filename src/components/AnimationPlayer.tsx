@@ -202,6 +202,50 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   }, [selectedFrame, isPlaying]);
 
+  // Add padding to the frames container for better centering of first and last frames
+  useEffect(() => {
+    if (framesContainerRef.current && frames.length > 0) {
+      const updatePadding = () => {
+        if (!framesContainerRef.current) return;
+        
+        // Get the container width
+        const containerWidth = framesContainerRef.current.clientWidth;
+        
+        // Set padding to half the container width to allow first and last frames to be centered
+        const paddingElement = document.createElement('div');
+        paddingElement.className = 'frames-padding';
+        paddingElement.style.minWidth = `${containerWidth / 2 - 10}px`; // Subtract half frame width
+        paddingElement.style.width = `${containerWidth / 2 - 10}px`;
+        paddingElement.style.height = '1px';
+        paddingElement.style.display = 'block';
+        
+        // Add padding elements to the beginning and end of the container
+        const firstChild = framesContainerRef.current.firstChild;
+        const paddingStart = paddingElement.cloneNode(true);
+        const paddingEnd = paddingElement.cloneNode(true);
+        
+        // Remove existing padding elements if they exist
+        const existingPadding = framesContainerRef.current.querySelectorAll('.frames-padding');
+        existingPadding.forEach(el => el.remove());
+        
+        // Add new padding elements
+        framesContainerRef.current.insertBefore(paddingStart, firstChild);
+        framesContainerRef.current.appendChild(paddingEnd);
+      };
+      
+      // Initial update
+      updatePadding();
+      
+      // Update padding when window is resized
+      window.addEventListener('resize', updatePadding);
+      
+      // Clean up
+      return () => {
+        window.removeEventListener('resize', updatePadding);
+      };
+    }
+  }, [frames.length]);
+
   return (
     <div className="player-container">
       <div className="controls">
