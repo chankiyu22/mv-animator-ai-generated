@@ -83,7 +83,6 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
       cursorWidth: 1,
       height: 100,
       barGap: 2,
-      backend: 'WebAudio'
     });
     
     wavesurferRef.current = wavesurfer;
@@ -103,6 +102,12 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     // Track current time for animation preview
     const handleAudioProcess = (time: number) => {
       setCurrentTime(time);
+      
+      // Update selected frame during playback
+      const frameIndex = Math.floor(time * FPS);
+      if (frameIndex >= 0 && frameIndex < frames.length) {
+        setSelectedFrame(frameIndex);
+      }
     };
     
     // Update current time and selected frame when seeking
@@ -121,9 +126,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     
     // Add click handler for waveform to update frame when clicked
     const handleInteraction = () => {
-      if (!isPlaying) {
-        updateOnSeek();
-      }
+      updateOnSeek();
     };
     
     wavesurfer.on('ready', handleReady);
@@ -151,27 +154,15 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
       wavesurfer.destroy();
       URL.revokeObjectURL(audioUrl.current);
     };
-  }, [audioFile, FPS, frames.length, generateFrames, isPlaying]);
+  }, [audioFile, FPS, frames.length, generateFrames]);
 
   // Handle play/pause
   const togglePlayPause = () => {
     if (wavesurferRef.current && isWaveformReady) {
       console.log('Toggling play/pause');
       
-      // Force audio context to resume if it's suspended
-      try {
-        // @ts-expect-error - WaveSurfer types might not include all methods
-        const audioContext = wavesurferRef.current.getBackend()?.getAudioContext?.();
-        if (audioContext && audioContext.state === 'suspended') {
-          audioContext.resume().then(() => {
-            wavesurferRef.current?.playPause();
-          });
-          return;
-        }
-      } catch (e) {
-        console.log('Error accessing audio context:', e);
-      }
-      
+      // Directly use playPause without trying to access audio context
+      // WaveSurfer handles this internally
       wavesurferRef.current.playPause();
     } else {
       console.log('Waveform not ready yet');
@@ -245,34 +236,9 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     if (wavesurferRef.current && selectedFrame !== null && isWaveformReady) {
       const frameTime = frames[selectedFrame].time;
       wavesurferRef.current.seekTo(frameTime / duration);
-      
-      // Force audio context to resume if it's suspended
-      try {
-        // @ts-expect-error - WaveSurfer types might not include all methods
-        const audioContext = wavesurferRef.current.getBackend()?.getAudioContext?.();
-        if (audioContext && audioContext.state === 'suspended') {
-          audioContext.resume().then(() => {
-            wavesurferRef.current?.play();
-          });
-          return;
-        }
-      } catch (e) {
-        console.log('Error accessing audio context:', e);
-      }
-      
       wavesurferRef.current.play();
     }
   };
-
-  // Update selected frame when current time changes during playback
-  useEffect(() => {
-    if (isPlaying) {
-      const frameIndex = Math.floor(currentTime * FPS);
-      if (frameIndex >= 0 && frameIndex < frames.length) {
-        setSelectedFrame(frameIndex);
-      }
-    }
-  }, [currentTime, isPlaying, FPS, frames.length]);
 
   // Add a direct click handler for the waveform container
   const handleWaveformClick = () => {
@@ -300,14 +266,14 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         // Center the element in the container
         const scrollPosition = elementLeft - (containerWidth / 2) + (elementWidth / 2);
         
-        // Use different scroll behavior based on playback state
+        // Always use auto during playback to avoid lag
         container.scrollTo({
           left: Math.max(0, scrollPosition),
-          behavior: isPlaying ? 'auto' : 'smooth'
+          behavior: 'auto'
         });
       }
     }
-  }, [selectedFrame, isPlaying]);
+  }, [selectedFrame]);
 
   // Add padding to the frames container for better centering of first and last frames
   useEffect(() => {
