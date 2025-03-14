@@ -169,9 +169,11 @@ async function generateMovie(options) {
   
   if (format === 'gif') {
     // Generate GIF
+    const frameImagesJson = JSON.stringify(frameImages);
     result = await pyodide.runPythonAsync(`
+      frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
       create_gif(
-        js.to_py(${JSON.stringify(frameImages)}),
+        frameImages,
         ${fps},
         ${quality},
         ${resolution.width},
@@ -185,9 +187,11 @@ async function generateMovie(options) {
     };
   } else if (format === 'png') {
     // Generate PNG sequence
+    const frameImagesJson = JSON.stringify(frameImages);
     result = await pyodide.runPythonAsync(`
+      frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
       create_png_sequence(
-        js.to_py(${JSON.stringify(frameImages)}),
+        frameImages,
         ${resolution.width},
         ${resolution.height},
         ${quality}
@@ -201,9 +205,11 @@ async function generateMovie(options) {
   } else if (format === 'mp4' || format === 'webm') {
     // For video formats, we'll return an error message for now
     // as full video generation requires additional libraries
+    const frameImagesJson = JSON.stringify(frameImages);
     result = await pyodide.runPythonAsync(`
+      frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
       create_video(
-        js.to_py(${JSON.stringify(frameImages)}),
+        frameImages,
         ${fps},
         "${format}",
         ${resolution.width},
