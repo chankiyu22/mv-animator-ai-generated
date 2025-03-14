@@ -215,7 +215,7 @@ async function generateMovie(options) {
         ${resolution.width},
         ${resolution.height},
         ${quality},
-        ${includeAudio},
+        ${includeAudio ? "True" : "False"},
         None  # Audio data would go here
       )
     `);
