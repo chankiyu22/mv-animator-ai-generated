@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import FrameEditor from './FrameEditor';
 import AnimationPreview from './AnimationPreview';
@@ -26,9 +26,30 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const frameRefs = useRef<(HTMLDivElement | null)[]>([]);
   const FPS = 24;
 
-  // Initialize WaveSurfer
+  // Generate frames based on audio duration and FPS
+  const generateFrames = useCallback((audioDuration: number) => {
+    // Only generate frames if they don't exist yet
+    if (frames.length === 0) {
+      const totalFrames = Math.ceil(audioDuration * FPS);
+      const newFrames: FrameData[] = [];
+      
+      for (let i = 0; i < totalFrames; i++) {
+        newFrames.push({
+          id: i,
+          time: i / FPS,
+          image: null,
+        });
+      }
+      
+      setFrames(newFrames);
+      // Reset frame refs array to match the new number of frames
+      frameRefs.current = Array(totalFrames).fill(null);
+    }
+  }, [frames.length, FPS]);
+
+  // Initialize WaveSurfer - only once when component mounts
   useEffect(() => {
-    if (waveformRef.current && audioFile) {
+    if (waveformRef.current && audioFile && !wavesurferRef.current) {
       // Create audio URL
       audioUrl.current = URL.createObjectURL(audioFile);
       
@@ -50,70 +71,76 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
       // Load audio file
       wavesurfer.load(audioUrl.current);
       
-      // Set up event listeners
-      wavesurfer.on('ready', () => {
-        setDuration(wavesurfer.getDuration());
-        generateFrames(wavesurfer.getDuration());
-      });
-      
-      wavesurfer.on('play', () => setIsPlaying(true));
-      wavesurfer.on('pause', () => setIsPlaying(false));
-      wavesurfer.on('finish', () => setIsPlaying(false));
-      
-      // Track current time for animation preview
-      wavesurfer.on('audioprocess', (time) => {
-        setCurrentTime(time);
-      });
-      
-      // Update current time and selected frame when seeking
-      const updateOnSeek = () => {
-        if (wavesurferRef.current) {
-          const newTime = wavesurferRef.current.getCurrentTime();
-          setCurrentTime(newTime);
-          
-          // Update selected frame based on the new time position
-          const frameIndex = Math.floor(newTime * FPS);
-          if (frameIndex >= 0 && frameIndex < frames.length) {
-            setSelectedFrame(frameIndex);
-          }
-        }
-      };
-      
-      // @ts-expect-error - WaveSurfer types might not include all events
-      wavesurfer.on('seek', updateOnSeek);
-      
-      // Add click handler for waveform to update frame when clicked
-      wavesurfer.on('interaction', () => {
-        if (!isPlaying) {
-          updateOnSeek();
-        }
-      });
-      
       // Clean up on unmount
       return () => {
         wavesurfer.destroy();
         URL.revokeObjectURL(audioUrl.current);
       };
     }
-  }, [audioFile, FPS, frames.length, isPlaying]);
+  }, [audioFile]);
 
-  // Generate frames based on audio duration and FPS
-  const generateFrames = (audioDuration: number) => {
-    const totalFrames = Math.ceil(audioDuration * FPS);
-    const newFrames: FrameData[] = [];
+  // Set up event listeners for WaveSurfer - separate from initialization
+  useEffect(() => {
+    const wavesurfer = wavesurferRef.current;
+    if (!wavesurfer) return;
     
-    for (let i = 0; i < totalFrames; i++) {
-      newFrames.push({
-        id: i,
-        time: i / FPS,
-        image: null,
-      });
-    }
+    // Set up event listeners
+    const handleReady = () => {
+      setDuration(wavesurfer.getDuration());
+      generateFrames(wavesurfer.getDuration());
+    };
     
-    setFrames(newFrames);
-    // Reset frame refs array to match the new number of frames
-    frameRefs.current = Array(totalFrames).fill(null);
-  };
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+    const handleFinish = () => setIsPlaying(false);
+    
+    // Track current time for animation preview
+    const handleAudioProcess = (time: number) => {
+      setCurrentTime(time);
+    };
+    
+    // Update current time and selected frame when seeking
+    const updateOnSeek = () => {
+      if (wavesurferRef.current) {
+        const newTime = wavesurferRef.current.getCurrentTime();
+        setCurrentTime(newTime);
+        
+        // Update selected frame based on the new time position
+        const frameIndex = Math.floor(newTime * FPS);
+        if (frameIndex >= 0 && frameIndex < frames.length) {
+          setSelectedFrame(frameIndex);
+        }
+      }
+    };
+    
+    // Add click handler for waveform to update frame when clicked
+    const handleInteraction = () => {
+      if (!isPlaying) {
+        updateOnSeek();
+      }
+    };
+    
+    wavesurfer.on('ready', handleReady);
+    wavesurfer.on('play', handlePlay);
+    wavesurfer.on('pause', handlePause);
+    wavesurfer.on('finish', handleFinish);
+    wavesurfer.on('audioprocess', handleAudioProcess);
+    // @ts-expect-error - WaveSurfer types might not include all events
+    wavesurfer.on('seek', updateOnSeek);
+    wavesurfer.on('interaction', handleInteraction);
+    
+    // Clean up event listeners
+    return () => {
+      wavesurfer.un('ready', handleReady);
+      wavesurfer.un('play', handlePlay);
+      wavesurfer.un('pause', handlePause);
+      wavesurfer.un('finish', handleFinish);
+      wavesurfer.un('audioprocess', handleAudioProcess);
+      // @ts-expect-error - WaveSurfer types might not include all events
+      wavesurfer.un('seek', updateOnSeek);
+      wavesurfer.un('interaction', handleInteraction);
+    };
+  }, [FPS, frames.length, generateFrames, isPlaying]);
 
   // Handle play/pause
   const togglePlayPause = () => {
