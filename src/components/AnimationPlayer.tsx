@@ -63,15 +63,20 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         setCurrentTime(time);
       });
       
-      // Update current time when seeking
-      const updateTimeOnSeek = () => {
+      // Update current time and selected frame when seeking
+      const updateOnSeek = () => {
         if (wavesurferRef.current) {
-          setCurrentTime(wavesurferRef.current.getCurrentTime());
+          const newTime = wavesurferRef.current.getCurrentTime();
+          setCurrentTime(newTime);
+          
+          // Update selected frame based on the new time position
+          const frameIndex = Math.floor(newTime * FPS);
+          setSelectedFrame(frameIndex);
         }
       };
       
       // @ts-expect-error - WaveSurfer types might not include all events
-      wavesurfer.on('seek', updateTimeOnSeek);
+      wavesurfer.on('seek', updateOnSeek);
       
       // Clean up on unmount
       return () => {
@@ -79,7 +84,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         URL.revokeObjectURL(audioUrl.current);
       };
     }
-  }, [audioFile]);
+  }, [audioFile, FPS]);
 
   // Generate frames based on audio duration and FPS
   const generateFrames = (audioDuration: number) => {
@@ -108,6 +113,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const handleStop = () => {
     if (wavesurferRef.current) {
       wavesurferRef.current.stop();
+      setSelectedFrame(0);
     }
   };
 
@@ -137,6 +143,16 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
       wavesurferRef.current.play();
     }
   };
+
+  // Update selected frame when current time changes during playback
+  useEffect(() => {
+    if (isPlaying) {
+      const frameIndex = Math.floor(currentTime * FPS);
+      if (frameIndex >= 0 && frameIndex < frames.length) {
+        setSelectedFrame(frameIndex);
+      }
+    }
+  }, [currentTime, isPlaying, FPS, frames.length]);
 
   return (
     <div className="player-container">
