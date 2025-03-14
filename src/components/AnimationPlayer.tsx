@@ -173,20 +173,54 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   };
 
-  // Handle GIF processing and fill subsequent frames
-  const handleGifProcessed = (gifFrames: string[], startFrameId: number) => {
+  // Handle GIF processing and fill subsequent frames with proper timing
+  const handleGifProcessed = (gifFrames: string[], startFrameId: number, frameDelays: number[]) => {
     // Create a copy of the current frames
     const updatedFrames = [...frames];
     
-    // Fill subsequent frames with GIF frames
-    for (let i = 0; i < gifFrames.length; i++) {
-      const frameIndex = startFrameId + i;
-      if (frameIndex < updatedFrames.length) {
-        updatedFrames[frameIndex] = {
-          ...updatedFrames[frameIndex],
-          image: gifFrames[i]
-        };
+    // Calculate total GIF duration in seconds
+    // GIF delays are in 1/100th of a second
+    const totalGifDurationMs = frameDelays.reduce((sum, delay) => sum + delay, 0) * 10; // Convert to ms
+    const totalGifDurationSec = totalGifDurationMs / 1000;
+    
+    // Calculate how many audio frames the GIF should span
+    const audioFramesForGif = Math.ceil(totalGifDurationSec * FPS);
+    
+    // Calculate cumulative time for each GIF frame
+    const gifFrameTimes: number[] = [];
+    let cumulativeTime = 0;
+    
+    for (const delay of frameDelays) {
+      gifFrameTimes.push(cumulativeTime);
+      cumulativeTime += delay / 100; // Convert to seconds
+    }
+    
+    // Map GIF frames to audio timeline
+    for (let audioFrameIndex = 0; audioFrameIndex < audioFramesForGif; audioFrameIndex++) {
+      const targetIndex = startFrameId + audioFrameIndex;
+      
+      if (targetIndex >= updatedFrames.length) {
+        break; // Don't go beyond the audio duration
       }
+      
+      // Calculate the time position within the GIF
+      const timeInGif = (audioFrameIndex / audioFramesForGif) * totalGifDurationSec;
+      
+      // Find the closest GIF frame for this time
+      let closestGifFrameIndex = 0;
+      for (let i = 1; i < gifFrameTimes.length; i++) {
+        if (timeInGif >= gifFrameTimes[i]) {
+          closestGifFrameIndex = i;
+        } else {
+          break;
+        }
+      }
+      
+      // Apply the GIF frame to the audio frame
+      updatedFrames[targetIndex] = {
+        ...updatedFrames[targetIndex],
+        image: gifFrames[closestGifFrameIndex]
+      };
     }
     
     // Update frames state
