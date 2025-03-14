@@ -10,7 +10,7 @@ interface FrameData {
 interface FrameEditorProps {
   frame: FrameData;
   onImageUpload: (image: string) => void;
-  onGifProcessed?: (frames: string[], startFrameId: number, frameDelays: number[]) => void;
+  onGifProcessed?: (frames: string[], startFrameId: number) => void;
 }
 
 const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps) => {
@@ -68,9 +68,6 @@ const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps)
       // Parse the GIF
       const gif = parseGIF(new Uint8Array(buffer));
       const frames = decompressFrames(gif, true);
-      
-      // Extract frame delays (in 1/100th of a second)
-      const frameDelays = frames.map(frame => frame.delay);
       
       // Create canvas to render frames
       const canvas = document.createElement('canvas');
@@ -138,8 +135,8 @@ const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps)
         onImageUpload(frameImages[0]);
       }
       
-      // Pass the frames, starting frame ID, and frame delays to be processed
-      onGifProcessed(frameImages, frame.id, frameDelays);
+      // Pass the rest of the frames to be processed
+      onGifProcessed(frameImages, frame.id);
       
     } catch (error) {
       console.error('Error processing GIF:', error);
@@ -196,7 +193,7 @@ const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps)
           style={{ height: '200px' }}
         >
           <p>Drag and drop an image here, or click to select an image</p>
-          <p className="gif-support">GIF files will automatically fill subsequent frames with proper timing</p>
+          <p className="gif-support">GIF files will automatically fill subsequent frames</p>
           {isProcessingGif && <p>Processing GIF... This may take a moment.</p>}
         </div>
       )}
