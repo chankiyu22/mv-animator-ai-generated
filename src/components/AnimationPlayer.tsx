@@ -186,6 +186,8 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     // Calculate how many audio frames the GIF should span
     const audioFramesForGif = Math.ceil(gifInfo.totalDuration * FPS);
     
+    console.log(`Mapping GIF (${gifInfo.frames.length} frames, ${gifInfo.totalDuration.toFixed(2)}s) to ${audioFramesForGif} audio frames`);
+    
     // Determine the end frame ID (capped by the total number of frames)
     const endFrameId = Math.min(startFrameId + audioFramesForGif, frames.length);
     
@@ -195,7 +197,10 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     // Distribute GIF frames evenly across the available audio frames
     for (let i = 0; i < availableFrames; i++) {
       // Calculate which GIF frame to use based on the relative position
-      const gifFrameIndex = Math.floor((i / availableFrames) * gifInfo.frames.length);
+      const gifFrameIndex = Math.min(
+        Math.floor((i / availableFrames) * gifInfo.frames.length),
+        gifInfo.frames.length - 1
+      );
       
       // Apply the GIF frame to the corresponding audio frame
       const frameIndex = startFrameId + i;

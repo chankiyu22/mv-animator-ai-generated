@@ -75,8 +75,11 @@ const FrameEditor = ({ frame, onImageUpload, onGifProcessed }: FrameEditorProps)
       const frames = decompressFrames(gif, true);
       
       // Calculate total duration in seconds
-      const totalDurationMs = frames.reduce((sum, frame) => sum + frame.delay, 0) * 10; // Convert to ms
-      const totalDuration = totalDurationMs / 1000; // Convert to seconds
+      // GIF delays are in milliseconds
+      const totalDurationMs = frames.reduce((sum, frame) => sum + frame.delay, 0);
+      const totalDuration = totalDurationMs / 1000; // Convert milliseconds to seconds
+      
+      console.log(`GIF info: ${frames.length} frames, total duration: ${totalDuration}s`);
       
       // Create canvas to render frames
       const canvas = document.createElement('canvas');
