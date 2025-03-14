@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import FrameEditor from './FrameEditor';
+import AnimationPreview from './AnimationPreview';
 
 interface AnimationPlayerProps {
   audioFile: File;
@@ -17,6 +18,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
   const waveformRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const audioUrl = useRef<string>('');
@@ -55,6 +57,21 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
       wavesurfer.on('play', () => setIsPlaying(true));
       wavesurfer.on('pause', () => setIsPlaying(false));
       wavesurfer.on('finish', () => setIsPlaying(false));
+      
+      // Track current time for animation preview
+      wavesurfer.on('audioprocess', (time) => {
+        setCurrentTime(time);
+      });
+      
+      // Update current time when seeking
+      const updateTimeOnSeek = () => {
+        if (wavesurferRef.current) {
+          setCurrentTime(wavesurferRef.current.getCurrentTime());
+        }
+      };
+      
+      // @ts-expect-error - WaveSurfer types might not include all events
+      wavesurfer.on('seek', updateTimeOnSeek);
       
       // Clean up on unmount
       return () => {
@@ -128,7 +145,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
           {isPlaying ? 'Pause' : 'Play'}
         </button>
         <button onClick={handleStop}>Stop</button>
-        {selectedFrame !== null && (
+        {selectedFrame !== null && !isPlaying && (
           <button onClick={playFromSelectedFrame}>
             Play from Selected Frame
           </button>
@@ -153,11 +170,15 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
       
       <div className="waveform-container" ref={waveformRef}></div>
       
-      {selectedFrame !== null && (
-        <FrameEditor 
-          frame={frames[selectedFrame]} 
-          onImageUpload={handleImageUpload} 
-        />
+      {isPlaying ? (
+        <AnimationPreview frames={frames} currentTime={currentTime} />
+      ) : (
+        selectedFrame !== null && (
+          <FrameEditor 
+            frame={frames[selectedFrame]} 
+            onImageUpload={handleImageUpload} 
+          />
+        )
       )}
     </div>
   );
