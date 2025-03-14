@@ -300,9 +300,9 @@ async function generateMovie(options) {
                 js.console.log("Result is a dictionary:", result)
                 result_json = json.dumps(result)
                 js.console.log("Result as JSON:", result_json)
-                return result_json
-            else:
-                result  # Return the result directly
+                result = result_json  # Assign to result instead of returning
+            # Return the result at the end of the try block
+            result
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
