@@ -29,12 +29,15 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [lastSelectedFrame, setLastSelectedFrame] = useState<number | null>(null);
+  const [visibleFrames, setVisibleFrames] = useState<{ start: number; end: number }>({ start: 0, end: 50 });
   const waveformRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const audioUrl = useRef<string>('');
   const framesContainerRef = useRef<HTMLDivElement>(null);
   const frameRefs = useRef<(HTMLDivElement | null)[]>([]);
   const FPS = 24;
+  const FRAME_WIDTH = 24; // Width of a frame including gap (20px + 2px gap + 2px border)
+  const BUFFER_SIZE = 20; // Number of extra frames to render on each side
 
   // Generate frames based on audio duration and FPS
   const generateFrames = useCallback((audioDuration: number) => {
@@ -422,6 +425,114 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   };
 
+  // Handle scroll event to update visible frames
+  const handleScroll = useCallback(() => {
+    if (!framesContainerRef.current) return;
+    
+    const container = framesContainerRef.current;
+    const scrollPosition = container.scrollLeft;
+    const containerWidth = container.clientWidth;
+    
+    // Calculate which frames are visible
+    const startFrame = Math.max(0, Math.floor(scrollPosition / FRAME_WIDTH) - BUFFER_SIZE);
+    const endFrame = Math.min(
+      frames.length - 1, 
+      Math.ceil((scrollPosition + containerWidth) / FRAME_WIDTH) + BUFFER_SIZE
+    );
+    
+    setVisibleFrames({ start: startFrame, end: endFrame });
+  }, [frames.length]);
+
+  // Add scroll event listener
+  useEffect(() => {
+    const container = framesContainerRef.current;
+    if (container && frames.length > 0) {
+      container.addEventListener('scroll', handleScroll);
+      // Initial calculation of visible frames
+      handleScroll();
+      
+      return () => {
+        container.removeEventListener('scroll', handleScroll);
+      };
+    }
+  }, [frames.length, handleScroll]);
+
+  // Recalculate visible frames when window is resized
+  useEffect(() => {
+    window.addEventListener('resize', handleScroll);
+    return () => {
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [handleScroll]);
+
+  // Handle mouse down for drag scrolling
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!framesContainerRef.current) return;
+    
+    setIsDragging(true);
+    setStartX(e.pageX - framesContainerRef.current.offsetLeft);
+    setScrollLeft(framesContainerRef.current.scrollLeft);
+  };
+
+  // Handle mouse leave and mouse up to stop dragging
+  const handleMouseLeaveOrUp = () => {
+    setIsDragging(false);
+  };
+
+  // Handle mouse move for drag scrolling
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !framesContainerRef.current) return;
+    
+    // Prevent default to avoid text selection during drag
+    e.preventDefault();
+    
+    const x = e.pageX - framesContainerRef.current.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll speed multiplier
+    framesContainerRef.current.scrollLeft = scrollLeft - walk;
+    
+    // Update visible frames during dragging
+    handleScroll();
+  };
+
+  // Update spotlight position when window is resized
+  useEffect(() => {
+    if (isPlaying && selectedFrame !== null && framesContainerRef.current && frameRefs.current[selectedFrame]) {
+      const container = framesContainerRef.current;
+      
+      const updateSpotlightPosition = () => {
+        const selectedElement = frameRefs.current[selectedFrame];
+        
+        if (container && selectedElement) {
+          // Get the element's position relative to the viewport
+          const elementRect = selectedElement.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          
+          // Calculate the horizontal position for the spotlight
+          const viewportX = elementRect.left + (elementRect.width / 2);
+          const relativeX = (viewportX / window.innerWidth) * 100;
+          
+          // Set the spotlight position and dimensions
+          container.style.setProperty('--spotlight-x', `${relativeX}%`);
+          container.style.setProperty('--spotlight-top', `${containerRect.top}px`);
+          container.style.setProperty('--spotlight-height', `${containerRect.height}px`);
+        }
+      };
+      
+      // Update position initially
+      updateSpotlightPosition();
+      
+      // Add event listeners for resize and scroll
+      window.addEventListener('resize', updateSpotlightPosition);
+      container.addEventListener('scroll', updateSpotlightPosition);
+      
+      // Clean up
+      return () => {
+        window.removeEventListener('resize', updateSpotlightPosition);
+        container.removeEventListener('scroll', updateSpotlightPosition);
+      };
+    }
+  }, [isPlaying, selectedFrame]);
+
   // Scroll to selected frame when it changes
   useEffect(() => {
     if (selectedFrame !== null && framesContainerRef.current && frameRefs.current[selectedFrame]) {
@@ -506,70 +617,20 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   }, [frames.length]);
 
-  // Handle mouse down for drag scrolling
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!framesContainerRef.current) return;
-    
-    setIsDragging(true);
-    setStartX(e.pageX - framesContainerRef.current.offsetLeft);
-    setScrollLeft(framesContainerRef.current.scrollLeft);
+  // Create a placeholder for frames that are not visible
+  const renderFramePlaceholder = (frameCount: number) => {
+    if (frameCount <= 0) return null;
+    return (
+      <div 
+        className="frames-placeholder" 
+        style={{ 
+          minWidth: `${frameCount * FRAME_WIDTH}px`, 
+          width: `${frameCount * FRAME_WIDTH}px`,
+          height: '40px'
+        }}
+      />
+    );
   };
-
-  // Handle mouse leave and mouse up to stop dragging
-  const handleMouseLeaveOrUp = () => {
-    setIsDragging(false);
-  };
-
-  // Handle mouse move for drag scrolling
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || !framesContainerRef.current) return;
-    
-    // Prevent default to avoid text selection during drag
-    e.preventDefault();
-    
-    const x = e.pageX - framesContainerRef.current.offsetLeft;
-    const walk = (x - startX) * 2; // Scroll speed multiplier
-    framesContainerRef.current.scrollLeft = scrollLeft - walk;
-  };
-
-  // Update spotlight position when window is resized
-  useEffect(() => {
-    if (isPlaying && selectedFrame !== null && framesContainerRef.current && frameRefs.current[selectedFrame]) {
-      const container = framesContainerRef.current;
-      
-      const updateSpotlightPosition = () => {
-        const selectedElement = frameRefs.current[selectedFrame];
-        
-        if (container && selectedElement) {
-          // Get the element's position relative to the viewport
-          const elementRect = selectedElement.getBoundingClientRect();
-          const containerRect = container.getBoundingClientRect();
-          
-          // Calculate the horizontal position for the spotlight
-          const viewportX = elementRect.left + (elementRect.width / 2);
-          const relativeX = (viewportX / window.innerWidth) * 100;
-          
-          // Set the spotlight position and dimensions
-          container.style.setProperty('--spotlight-x', `${relativeX}%`);
-          container.style.setProperty('--spotlight-top', `${containerRect.top}px`);
-          container.style.setProperty('--spotlight-height', `${containerRect.height}px`);
-        }
-      };
-      
-      // Update position initially
-      updateSpotlightPosition();
-      
-      // Add event listeners for resize and scroll
-      window.addEventListener('resize', updateSpotlightPosition);
-      container.addEventListener('scroll', updateSpotlightPosition);
-      
-      // Clean up
-      return () => {
-        window.removeEventListener('resize', updateSpotlightPosition);
-        container.removeEventListener('scroll', updateSpotlightPosition);
-      };
-    }
-  }, [isPlaying, selectedFrame]);
 
   return (
     <div className="player-container">
@@ -594,16 +655,24 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         onMouseMove={handleMouseMove}
         style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
       >
-        {frames.map((frame, index) => (
+        {/* Padding for first and last frames will be handled by updatePadding useEffect */}
+        
+        {/* Placeholder for frames before the visible range */}
+        {visibleFrames.start > 0 && renderFramePlaceholder(visibleFrames.start)}
+        
+        {/* Only render frames that are visible */}
+        {frames.slice(visibleFrames.start, visibleFrames.end + 1).map((frame) => (
           <div
             key={frame.id}
-            ref={el => { frameRefs.current[index] = el; }}
+            ref={el => { frameRefs.current[frame.id] = el; }}
             className={`frame ${selectedFrame === frame.id ? 'selected' : ''}`}
             onClick={() => handleFrameClick(frame.id)}
             title={`Frame ${frame.id} (${frame.time.toFixed(2)}s)`}
             onDragOver={handleFrameDragOver}
             onDragLeave={handleFrameDragLeave}
             onDrop={(e) => handleFrameDrop(e, frame.id)}
+            style={{ position: 'relative' }}
+            data-frame-id={frame.id}
           >
             {frame.image ? (
               <img src={frame.image} alt={`Frame ${frame.id}`} className="frame-image" />
@@ -612,6 +681,9 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
             )}
           </div>
         ))}
+        
+        {/* Placeholder for frames after the visible range */}
+        {visibleFrames.end < frames.length - 1 && renderFramePlaceholder(frames.length - 1 - visibleFrames.end)}
       </div>
       
       <div 
