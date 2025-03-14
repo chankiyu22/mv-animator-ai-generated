@@ -442,9 +442,20 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
           left: Math.max(0, scrollPosition),
           behavior: 'auto'
         });
+        
+        // Update spotlight position for the filter effect
+        if (isPlaying) {
+          // Calculate the relative position of the selected frame within the container
+          const containerRect = container.getBoundingClientRect();
+          const elementRect = selectedElement.getBoundingClientRect();
+          const relativeX = ((elementRect.left + elementRect.width / 2) - containerRect.left) / containerRect.width * 100;
+          
+          // Update the CSS variable for the spotlight position
+          container.style.setProperty('--spotlight-x', `${relativeX}%`);
+        }
       }
     }
-  }, [selectedFrame]);
+  }, [selectedFrame, isPlaying]);
 
   // Add padding to the frames container for better centering of first and last frames
   useEffect(() => {
@@ -531,7 +542,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
       </div>
       
       <div 
-        className="frames-container" 
+        className={`frames-container ${isPlaying ? 'playing' : ''}`}
         ref={framesContainerRef}
         onMouseDown={handleMouseDown}
         onMouseLeave={handleMouseLeaveOrUp}
