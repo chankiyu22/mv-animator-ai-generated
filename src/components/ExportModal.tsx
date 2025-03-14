@@ -1,13 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-// Import the libraries directly to avoid type errors
-import JSZip from 'jszip';
-// We're using a declaration file for gif.js
-
-interface FrameData {
-  id: number;
-  time: number;
-  image: string | null;
-}
+import pythonExportService, { ExportOptions as PythonExportOptions } from '../services/PythonExportService';
+import { FrameData } from '../types/FrameData';
 
 interface ExportModalProps {
   frames: FrameData[];
@@ -44,6 +37,16 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
     }
   });
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // Initialize Pyodide when the modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      // Start initializing Pyodide in the background
+      pythonExportService.ensureInitialized().catch(error => {
+        console.error('Failed to initialize Pyodide:', error);
+      });
+    }
+  }, [isOpen]);
 
   // Close modal when clicking outside
   useEffect(() => {
@@ -121,328 +124,32 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
     setProgress(0);
 
     try {
-      switch (exportOptions.format) {
-        case 'gif':
-          await exportAsGif();
-          break;
-        case 'mp4':
-          await exportAsVideo('mp4');
-          break;
-        case 'webm':
-          await exportAsVideo('webm');
-          break;
-        case 'png':
-          exportAsPngSequence();
-          break;
-        default:
-          throw new Error(`Unsupported format: ${exportOptions.format}`);
-      }
+      // Convert our export options to the format expected by the Python export service
+      const pythonOptions: PythonExportOptions = {
+        format: exportOptions.format,
+        quality: exportOptions.quality,
+        includeAudio: exportOptions.includeAudio,
+        useEntireSoundtrack: exportOptions.useEntireSoundtrack,
+        resolution: exportOptions.resolution
+      };
+
+      // Generate the movie using the Python export service
+      const result = await pythonExportService.generateMovie(
+        frames,
+        fps,
+        pythonOptions,
+        audioFile
+      );
+
+      // Download the result
+      pythonExportService.downloadResult(result);
+      
+      setProgress(100);
     } catch (error) {
       console.error('Export failed:', error);
       alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsExporting(false);
-      setProgress(100);
-    }
-  };
-
-  // Export as GIF
-  const exportAsGif = async () => {
-    try {
-      // Dynamically import the GIF.js library
-      const { default: GIF } = await import('gif.js');
-      
-      // Filter out frames with no images
-      const framesToExport = frames.filter(frame => frame.image);
-      
-      if (framesToExport.length === 0) {
-        throw new Error('No frames with images to export');
-      }
-
-      return new Promise<void>((resolve, reject) => {
-        // Create a new GIF
-        const gif = new GIF({
-          workers: 2,
-          quality: Math.max(1, Math.min(30, 31 - Math.floor(exportOptions.quality / 3.33))), // Convert 0-100 to 30-1 (lower is better in gif.js)
-          width: exportOptions.resolution.width,
-          height: exportOptions.resolution.height,
-          workerScript: '/gif.worker.js' // Make sure this file is in your public folder
-        });
-
-        // Create temporary images to add to the GIF
-        let loadedImages = 0;
-        const totalImages = framesToExport.length;
-
-        framesToExport.forEach((frame) => {
-          const img = new Image();
-          img.onload = () => {
-            // Create a canvas to resize the image if needed
-            const canvas = document.createElement('canvas');
-            canvas.width = exportOptions.resolution.width;
-            canvas.height = exportOptions.resolution.height;
-            const ctx = canvas.getContext('2d');
-            
-            if (ctx) {
-              // Draw the image with proper scaling
-              ctx.drawImage(img, 0, 0, exportOptions.resolution.width, exportOptions.resolution.height);
-              
-              // Add the frame to the GIF
-              gif.addFrame(canvas, { delay: 1000 / fps, copy: true });
-              
-              loadedImages++;
-              setProgress(Math.floor((loadedImages / totalImages) * 50)); // First 50% is loading images
-              
-              // When all images are loaded, render the GIF
-              if (loadedImages === totalImages) {
-                gif.on('progress', (p: number) => {
-                  setProgress(50 + Math.floor(p * 50)); // Last 50% is rendering
-                });
-                
-                gif.on('finished', (blob: Blob) => {
-                  // Create a download link
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement('a');
-                  link.href = url;
-                  link.download = `animation-${Date.now()}.gif`;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  URL.revokeObjectURL(url);
-                  resolve();
-                });
-                
-                gif.render();
-              }
-            } else {
-              reject(new Error('Could not get canvas context'));
-            }
-          };
-          
-          img.onerror = () => {
-            reject(new Error(`Failed to load image for frame ${frame.id}`));
-          };
-          
-          img.src = frame.image!;
-        });
-      });
-    } catch (error) {
-      console.error('GIF export failed:', error);
-      throw error;
-    }
-  };
-
-  // Export as video (MP4 or WebM)
-  const exportAsVideo = async (format: 'mp4' | 'webm') => {
-    try {
-      // Filter out frames with no images
-      const framesToExport = frames.filter(frame => frame.image);
-      
-      if (framesToExport.length === 0) {
-        throw new Error('No frames with images to export');
-      }
-
-      // Create a canvas for rendering frames
-      const canvas = document.createElement('canvas');
-      canvas.width = exportOptions.resolution.width;
-      canvas.height = exportOptions.resolution.height;
-      const ctx = canvas.getContext('2d');
-      
-      if (!ctx) {
-        throw new Error('Could not get canvas context');
-      }
-
-      // Set up MediaRecorder with canvas stream
-      const stream = canvas.captureStream(fps);
-      
-      // Add audio track if needed
-      let audioContext: AudioContext | null = null;
-      let audioSource: AudioBufferSourceNode | null = null;
-      
-      if (exportOptions.includeAudio && audioFile) {
-        audioContext = new AudioContext();
-        const audioBuffer = await audioFile.arrayBuffer();
-        audioSource = audioContext.createBufferSource();
-        audioSource.buffer = await audioContext.decodeAudioData(audioBuffer);
-        const audioDestination = audioContext.createMediaStreamDestination();
-        audioSource.connect(audioDestination);
-        
-        // Add audio tracks to the stream
-        audioDestination.stream.getAudioTracks().forEach(track => {
-          stream.addTrack(track);
-        });
-      }
-
-      // Set up MediaRecorder with appropriate MIME type
-      const mimeType = format === 'mp4' ? 'video/mp4' : 'video/webm';
-      const recorder = new MediaRecorder(stream, {
-        mimeType: mimeType,
-        videoBitsPerSecond: exportOptions.quality * 100000 // Scale quality (0-100) to bitrate
-      });
-
-      const chunks: BlobPart[] = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunks.push(e.data);
-        }
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `animation-${Date.now()}.${format}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        setProgress(100);
-      };
-
-      // Start recording
-      recorder.start();
-
-      // Calculate total duration based on export options
-      let totalDuration: number;
-      
-      if (exportOptions.useEntireSoundtrack && audioSource && audioSource.buffer) {
-        // Use the entire audio duration
-        totalDuration = audioSource.buffer.duration * 1000; // Convert to milliseconds
-      } else {
-        // Use only the duration of the animation frames
-        totalDuration = (framesToExport[framesToExport.length - 1].time - framesToExport[0].time) * 1000;
-      }
-
-      // Start audio playback if needed
-      if (audioSource) {
-        audioSource.start();
-      }
-
-      // Draw each frame at the appropriate time
-      let frameIndex = 0;
-      const frameDuration = 1000 / fps;
-      const startTime = performance.now();
-      
-      const drawNextFrame = async () => {
-        if (frameIndex >= framesToExport.length) {
-          // If using entire soundtrack, wait until the audio finishes before stopping
-          if (exportOptions.useEntireSoundtrack && audioSource && audioSource.buffer) {
-            const elapsed = performance.now() - startTime;
-            const remainingTime = Math.max(0, totalDuration - elapsed);
-            
-            if (remainingTime > 0) {
-              // Keep the last frame visible until audio finishes
-              setTimeout(() => {
-                recorder.stop();
-              }, remainingTime);
-            } else {
-              recorder.stop();
-            }
-          } else {
-            recorder.stop();
-          }
-          return;
-        }
-
-        const frame = framesToExport[frameIndex];
-        const img = new Image();
-        
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve();
-          };
-          img.onerror = () => reject(new Error(`Failed to load image for frame ${frame.id}`));
-          img.src = frame.image!;
-        });
-
-        // Update progress
-        const progressValue = exportOptions.useEntireSoundtrack && audioSource && audioSource.buffer
-          ? Math.floor(((performance.now() - startTime) / totalDuration) * 100)
-          : Math.floor((frameIndex / framesToExport.length) * 100);
-        
-        setProgress(Math.min(progressValue, 99)); // Cap at 99% until complete
-        
-        frameIndex++;
-        
-        // Schedule next frame
-        const elapsed = performance.now() - startTime;
-        const targetTime = frameIndex * frameDuration;
-        const delay = Math.max(0, targetTime - elapsed);
-        
-        setTimeout(drawNextFrame, delay);
-      };
-
-      // Start drawing frames
-      drawNextFrame();
-    } catch (error) {
-      console.error('Video export failed:', error);
-      throw error;
-    }
-  };
-
-  // Export as PNG sequence
-  const exportAsPngSequence = () => {
-    try {
-      // Filter out frames with no images
-      const framesToExport = frames.filter(frame => frame.image);
-      
-      if (framesToExport.length === 0) {
-        throw new Error('No frames with images to export');
-      }
-
-      const zip = new JSZip();
-      let processedFrames = 0;
-
-      // Process each frame
-      framesToExport.forEach((frame) => {
-        const img = new Image();
-        img.onload = () => {
-          // Create a canvas to resize the image if needed
-          const canvas = document.createElement('canvas');
-          canvas.width = exportOptions.resolution.width;
-          canvas.height = exportOptions.resolution.height;
-          const ctx = canvas.getContext('2d');
-          
-          if (ctx) {
-            // Draw the image with proper scaling
-            ctx.drawImage(img, 0, 0, exportOptions.resolution.width, exportOptions.resolution.height);
-            
-            // Convert to PNG and add to zip
-            canvas.toBlob((blob) => {
-              if (blob) {
-                // Add the PNG to the zip file
-                const fileName = `frame_${String(frame.id).padStart(4, '0')}.png`;
-                zip.file(fileName, blob);
-                
-                processedFrames++;
-                setProgress(Math.floor((processedFrames / framesToExport.length) * 100));
-                
-                // When all frames are processed, generate the zip file
-                if (processedFrames === framesToExport.length) {
-                  zip.generateAsync({ type: 'blob' }).then((zipBlob: Blob) => {
-                    // Create a download link
-                    const url = URL.createObjectURL(zipBlob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = `animation-frames-${Date.now()}.zip`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                  });
-                }
-              }
-            }, 'image/png', exportOptions.quality / 100);
-          }
-        };
-        
-        img.src = frame.image!;
-      });
-    } catch (error) {
-      console.error('Failed to create ZIP file for PNG sequence:', error);
-      throw new Error('Failed to create ZIP file for PNG sequence');
     }
   };
 
@@ -490,6 +197,11 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
                   PNG Sequence
                 </button>
               </div>
+              {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && (
+                <p className="note">
+                  Note: Video export is limited in the browser. For best results, use GIF or PNG Sequence.
+                </p>
+              )}
             </div>
             
             <div className="option-group">
@@ -571,6 +283,9 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
                 <div className="progress-fill" style={{ width: `${progress}%` }}></div>
               </div>
               <p>{progress}% complete</p>
+              <p className="note">
+                Processing with Python... This may take a moment as we're using Pyodide to run Python in your browser.
+              </p>
             </div>
           )}
           
