@@ -71,12 +71,21 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
           
           // Update selected frame based on the new time position
           const frameIndex = Math.floor(newTime * FPS);
-          setSelectedFrame(frameIndex);
+          if (frameIndex >= 0 && frameIndex < frames.length) {
+            setSelectedFrame(frameIndex);
+          }
         }
       };
       
       // @ts-expect-error - WaveSurfer types might not include all events
       wavesurfer.on('seek', updateOnSeek);
+      
+      // Add click handler for waveform to update frame when clicked
+      wavesurfer.on('interaction', () => {
+        if (!isPlaying) {
+          updateOnSeek();
+        }
+      });
       
       // Clean up on unmount
       return () => {
@@ -84,7 +93,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         URL.revokeObjectURL(audioUrl.current);
       };
     }
-  }, [audioFile, FPS]);
+  }, [audioFile, FPS, frames.length, isPlaying]);
 
   // Generate frames based on audio duration and FPS
   const generateFrames = (audioDuration: number) => {
@@ -154,6 +163,17 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     }
   }, [currentTime, isPlaying, FPS, frames.length]);
 
+  // Add a direct click handler for the waveform container
+  const handleWaveformClick = () => {
+    if (wavesurferRef.current && !isPlaying) {
+      const newTime = wavesurferRef.current.getCurrentTime();
+      const frameIndex = Math.floor(newTime * FPS);
+      if (frameIndex >= 0 && frameIndex < frames.length) {
+        setSelectedFrame(frameIndex);
+      }
+    }
+  };
+
   return (
     <div className="player-container">
       <div className="controls">
@@ -184,7 +204,11 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
         ))}
       </div>
       
-      <div className="waveform-container" ref={waveformRef}></div>
+      <div 
+        className="waveform-container" 
+        ref={waveformRef}
+        onClick={handleWaveformClick}
+      ></div>
       
       {isPlaying ? (
         <AnimationPreview frames={frames} currentTime={currentTime} />
