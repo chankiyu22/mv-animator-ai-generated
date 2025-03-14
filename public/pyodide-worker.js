@@ -20,19 +20,41 @@ self.onmessage = async function(e) {
       if (!isInitialized) {
         await initPyodide();
       }
-      const result = await generateMovie(data);
       
-      // Ensure result is serializable before posting
-      const serializableResult = {
-        data: result.data,
-        mimeType: result.mimeType,
-        extension: result.extension
-      };
-      
-      self.postMessage({ type: 'complete', result: serializableResult });
+      try {
+        const result = await generateMovie(data);
+        
+        // Ensure result is serializable by converting to string if needed
+        const serializableResult = {
+          data: typeof result.data === 'string' ? result.data : String(result.data),
+          mimeType: result.mimeType,
+          extension: result.extension
+        };
+        
+        console.log("Sending result to main thread:", 
+          {
+            type: typeof serializableResult.data,
+            length: serializableResult.data.length,
+            mimeType: serializableResult.mimeType,
+            extension: serializableResult.extension
+          }
+        );
+        
+        self.postMessage({ type: 'complete', result: serializableResult });
+      } catch (error) {
+        console.error("Error in generate:", error);
+        self.postMessage({ 
+          type: 'error', 
+          error: `Export failed: ${error.message || 'Unknown error'}`
+        });
+      }
     }
   } catch (error) {
-    self.postMessage({ type: 'error', error: error.message });
+    console.error("Top-level error:", error);
+    self.postMessage({ 
+      type: 'error', 
+      error: `Worker error: ${error.message || 'Unknown error'}`
+    });
   }
 };
 
@@ -162,6 +184,8 @@ async function generateMovie(options) {
     audioData 
   } = options;
   
+  console.log(`Generating ${format} with ${frames.length} frames at ${fps} FPS`);
+  
   // Filter out frames with no images
   const framesToExport = frames.filter(frame => frame.image);
   
@@ -171,24 +195,39 @@ async function generateMovie(options) {
   
   // Extract frame images
   const frameImages = framesToExport.map(frame => frame.image);
+  console.log(`Processing ${frameImages.length} frames with images`);
   
   // Call appropriate Python function based on format
   let result;
   
   if (format === 'gif') {
     // Generate GIF
-    const frameImagesJson = JSON.stringify(frameImages);
     try {
+      // Stringify and escape the frame images
+      const frameImagesJson = JSON.stringify(frameImages);
+      console.log(`JSON stringified frames, length: ${frameImagesJson.length}`);
+      
+      // Run Python code to generate GIF
       result = await pyodide.runPythonAsync(`
-        frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
-        create_gif(
-          frameImages,
-          ${fps},
-          ${quality},
-          ${resolution.width},
-          ${resolution.height}
-        )
+        try:
+            frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
+            result = create_gif(
+                frameImages,
+                ${fps},
+                ${quality},
+                ${resolution.width},
+                ${resolution.height}
+            )
+            result  # Return the result
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            js.console.error(f"Python error: {str(e)}\\n{error_details}")
+            raise
       `);
+      
+      console.log("GIF generation successful, result type:", typeof result);
+      
       return {
         data: result,
         mimeType: 'image/gif',
@@ -200,17 +239,31 @@ async function generateMovie(options) {
     }
   } else if (format === 'png') {
     // Generate PNG sequence
-    const frameImagesJson = JSON.stringify(frameImages);
     try {
+      // Stringify and escape the frame images
+      const frameImagesJson = JSON.stringify(frameImages);
+      console.log(`JSON stringified frames, length: ${frameImagesJson.length}`);
+      
+      // Run Python code to generate PNG sequence
       result = await pyodide.runPythonAsync(`
-        frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
-        create_png_sequence(
-          frameImages,
-          ${resolution.width},
-          ${resolution.height},
-          ${quality}
-        )
+        try:
+            frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
+            result = create_png_sequence(
+                frameImages,
+                ${resolution.width},
+                ${resolution.height},
+                ${quality}
+            )
+            result  # Return the result
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            js.console.error(f"Python error: {str(e)}\\n{error_details}")
+            raise
       `);
+      
+      console.log("PNG sequence generation successful, result type:", typeof result);
+      
       return {
         data: result,
         mimeType: 'application/zip',
@@ -222,22 +275,34 @@ async function generateMovie(options) {
     }
   } else if (format === 'mp4' || format === 'webm') {
     // For video formats, we'll return an error message for now
-    // as full video generation requires additional libraries
-    const frameImagesJson = JSON.stringify(frameImages);
     try {
+      // Stringify and escape the frame images
+      const frameImagesJson = JSON.stringify(frameImages);
+      console.log(`JSON stringified frames, length: ${frameImagesJson.length}`);
+      
+      // Run Python code to generate video
       result = await pyodide.runPythonAsync(`
-        frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
-        create_video(
-          frameImages,
-          ${fps},
-          "${format}",
-          ${resolution.width},
-          ${resolution.height},
-          ${quality},
-          ${includeAudio ? "True" : "False"},
-          None  # Audio data would go here
-        )
+        try:
+            frameImages = js.JSON.parse('${frameImagesJson.replace(/'/g, "\\'")}')
+            result = create_video(
+                frameImages,
+                ${fps},
+                "${format}",
+                ${resolution.width},
+                ${resolution.height},
+                ${quality},
+                ${includeAudio ? "True" : "False"},
+                None  # Audio data would go here
+            )
+            result  # Return the result
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            js.console.error(f"Python error: {str(e)}\\n{error_details}")
+            raise
       `);
+      
+      console.log("Video generation result:", result);
       
       if (result.error) {
         throw new Error(result.error);
