@@ -24,6 +24,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [isWaveformReady, setIsWaveformReady] = useState(false);
   const waveformRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const audioUrl = useRef<string>('');
@@ -56,9 +57,13 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
   useEffect(() => {
     if (!waveformRef.current || !audioFile) return;
     
+    // Reset state when audio file changes
+    setIsWaveformReady(false);
+    
     // Clean up previous instance if it exists
     if (wavesurferRef.current) {
       wavesurferRef.current.destroy();
+      wavesurferRef.current = null;
     }
     
     // Create audio URL
@@ -78,6 +83,7 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
       cursorWidth: 1,
       height: 100,
       barGap: 2,
+      backend: 'WebAudio'
     });
     
     wavesurferRef.current = wavesurfer;
@@ -86,6 +92,8 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
     const handleReady = () => {
       setDuration(wavesurfer.getDuration());
       generateFrames(wavesurfer.getDuration());
+      setIsWaveformReady(true);
+      console.log('Waveform is ready');
     };
     
     const handlePlay = () => setIsPlaying(true);
@@ -147,8 +155,26 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
 
   // Handle play/pause
   const togglePlayPause = () => {
-    if (wavesurferRef.current) {
+    if (wavesurferRef.current && isWaveformReady) {
+      console.log('Toggling play/pause');
+      
+      // Force audio context to resume if it's suspended
+      try {
+        // @ts-expect-error - WaveSurfer types might not include all methods
+        const audioContext = wavesurferRef.current.getBackend()?.getAudioContext?.();
+        if (audioContext && audioContext.state === 'suspended') {
+          audioContext.resume().then(() => {
+            wavesurferRef.current?.playPause();
+          });
+          return;
+        }
+      } catch (e) {
+        console.log('Error accessing audio context:', e);
+      }
+      
       wavesurferRef.current.playPause();
+    } else {
+      console.log('Waveform not ready yet');
     }
   };
 
@@ -216,9 +242,24 @@ const AnimationPlayer = ({ audioFile }: AnimationPlayerProps) => {
 
   // Start playback from selected frame
   const playFromSelectedFrame = () => {
-    if (wavesurferRef.current && selectedFrame !== null) {
+    if (wavesurferRef.current && selectedFrame !== null && isWaveformReady) {
       const frameTime = frames[selectedFrame].time;
       wavesurferRef.current.seekTo(frameTime / duration);
+      
+      // Force audio context to resume if it's suspended
+      try {
+        // @ts-expect-error - WaveSurfer types might not include all methods
+        const audioContext = wavesurferRef.current.getBackend()?.getAudioContext?.();
+        if (audioContext && audioContext.state === 'suspended') {
+          audioContext.resume().then(() => {
+            wavesurferRef.current?.play();
+          });
+          return;
+        }
+      } catch (e) {
+        console.log('Error accessing audio context:', e);
+      }
+      
       wavesurferRef.current.play();
     }
   };
