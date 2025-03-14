@@ -33,6 +33,7 @@ interface ExportOptions {
 const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalProps) => {
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [exportStatus, setExportStatus] = useState<string>('');
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     format: 'gif',
     quality: 80,
@@ -119,19 +120,24 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
 
     setIsExporting(true);
     setProgress(0);
+    setExportStatus('Preparing export...');
 
     try {
       switch (exportOptions.format) {
         case 'gif':
+          setExportStatus('Generating GIF...');
           await exportAsGif();
           break;
         case 'mp4':
+          setExportStatus('Preparing video export...');
           await exportAsVideo('mp4');
           break;
         case 'webm':
+          setExportStatus('Preparing video export...');
           await exportAsVideo('webm');
           break;
         case 'png':
+          setExportStatus('Creating PNG sequence...');
           exportAsPngSequence();
           break;
         default:
@@ -143,6 +149,11 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
     } finally {
       setIsExporting(false);
       setProgress(100);
+      setExportStatus('Export complete!');
+      // Reset status after a delay
+      setTimeout(() => {
+        setExportStatus('');
+      }, 3000);
     }
   };
 
@@ -241,6 +252,8 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
         throw new Error('No frames with images to export');
       }
 
+      setExportStatus('Setting up canvas and media recorder...');
+      
       // Create a canvas for rendering frames
       const canvas = document.createElement('canvas');
       canvas.width = exportOptions.resolution.width;
@@ -259,6 +272,7 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
       let audioSource: AudioBufferSourceNode | null = null;
       
       if (exportOptions.includeAudio && audioFile) {
+        setExportStatus('Processing audio...');
         audioContext = new AudioContext();
         const audioBuffer = await audioFile.arrayBuffer();
         audioSource = audioContext.createBufferSource();
@@ -272,6 +286,8 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
         });
       }
 
+      setExportStatus('Initializing video recorder...');
+      
       // Set up MediaRecorder with appropriate MIME type
       const mimeType = format === 'mp4' ? 'video/mp4' : 'video/webm';
       const recorder = new MediaRecorder(stream, {
@@ -287,6 +303,7 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
       };
 
       recorder.onstop = () => {
+        setExportStatus('Finalizing video...');
         const blob = new Blob(chunks, { type: mimeType });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -297,10 +314,12 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
         setProgress(100);
+        setExportStatus('Video export complete!');
       };
 
       // Start recording
       recorder.start();
+      setExportStatus('Recording video frames...');
 
       // Calculate total duration based on export options
       let totalDuration: number;
@@ -332,13 +351,17 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
             
             if (remainingTime > 0) {
               // Keep the last frame visible until audio finishes
+              setExportStatus(`Waiting for audio to complete (${Math.ceil(remainingTime / 1000)}s remaining)...`);
               setTimeout(() => {
+                setExportStatus('Finalizing video...');
                 recorder.stop();
               }, remainingTime);
             } else {
+              setExportStatus('Finalizing video...');
               recorder.stop();
             }
           } else {
+            setExportStatus('Finalizing video...');
             recorder.stop();
           }
           return;
@@ -363,6 +386,9 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
           : Math.floor((frameIndex / framesToExport.length) * 100);
         
         setProgress(Math.min(progressValue, 99)); // Cap at 99% until complete
+        
+        // Update status with frame information
+        setExportStatus(`Processing frame ${frameIndex + 1}/${framesToExport.length} (${progressValue}%)...`);
         
         frameIndex++;
         
@@ -565,26 +591,32 @@ const ExportModal = ({ frames, fps, audioFile, onClose, isOpen }: ExportModalPro
             )}
           </div>
           
-          {isExporting && (
+          {isExporting ? (
             <div className="export-progress">
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${progress}%` }}></div>
+              <h3>Exporting {exportOptions.format.toUpperCase()}</h3>
+              <div className="progress-bar-container">
+                <div 
+                  className="progress-bar" 
+                  style={{ width: `${progress}%` }}
+                ></div>
               </div>
-              <p>{progress}% complete</p>
+              <p className="progress-percentage">{progress}%</p>
+              {exportStatus && <p className="export-status">{exportStatus}</p>}
+              <p>Please wait while your animation is being exported...</p>
+            </div>
+          ) : (
+            <div className="export-summary">
+              <p>
+                <strong>Summary:</strong> Exporting {frames.filter(f => f.image).length} frames as {exportOptions.format.toUpperCase()} 
+                at {exportOptions.resolution.width}x{exportOptions.resolution.height} with {exportOptions.quality}% quality
+                {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && 
+                  ` ${exportOptions.includeAudio && audioFile ? 'with' : 'without'} audio`}
+                {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && 
+                  exportOptions.includeAudio && exportOptions.useEntireSoundtrack && audioFile && 
+                  ` (using entire soundtrack)`}
+              </p>
             </div>
           )}
-          
-          <div className="export-summary">
-            <p>
-              <strong>Summary:</strong> Exporting {frames.filter(f => f.image).length} frames as {exportOptions.format.toUpperCase()} 
-              at {exportOptions.resolution.width}x{exportOptions.resolution.height} with {exportOptions.quality}% quality
-              {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && 
-                ` ${exportOptions.includeAudio && audioFile ? 'with' : 'without'} audio`}
-              {(exportOptions.format === 'mp4' || exportOptions.format === 'webm') && 
-                exportOptions.includeAudio && exportOptions.useEntireSoundtrack && audioFile && 
-                ` (using entire soundtrack)`}
-            </p>
-          </div>
         </div>
         
         <div className="modal-footer">
